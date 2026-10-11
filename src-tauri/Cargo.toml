@@ -1,0 +1,36 @@
+[package]
+name = "dictation-ai"
+version = "0.1.0"
+description = "Hold-to-talk dictation for macOS"
+authors = ["asadalikazim"]
+edition = "2024"
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+name = "dictation_ai_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+dotenvy = "0.15"
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+cpal = "0.16"
+arboard = "3"
+core-graphics = "0.24"
+core-foundation = "0.10"
+hound = "3.5"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
