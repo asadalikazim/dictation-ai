@@ -115,7 +115,7 @@ fn open_stream(device_name: Option<&str>) -> Result<OpenStream, String> {
             .ok()?
             .find(|d| d.name().is_ok_and(|n| n == wanted));
         if found.is_none() {
-            eprintln!("[audio] input device {wanted:?} not found, using system default");
+            log::warn!("input device {wanted:?} not found, using system default");
         }
         found
     });
@@ -168,7 +168,7 @@ where
                 buf.push(sum / channels as f32);
             }
         },
-        |err| eprintln!("[audio] stream error: {err}"),
+        |err| log::error!("audio stream error: {err}"),
         None,
     )
 }

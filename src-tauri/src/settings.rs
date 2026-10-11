@@ -9,6 +9,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::audio;
+use crate::usage::{UsageSnapshot, UsageStore};
 
 pub const DEFAULT_HOTKEY: &str = "Alt+Space";
 pub const DEFAULT_CLEANUP_MODEL: &str = "anthropic/claude-haiku-5.5";
@@ -57,15 +58,22 @@ pub struct AppState {
     /// The shortcut currently registered with the OS.
     pub shortcut: Mutex<Shortcut>,
     pub settings_path: PathBuf,
+    pub usage: UsageStore,
 }
 
 impl AppState {
-    pub fn new(settings: Settings, shortcut: Shortcut, settings_path: PathBuf) -> Self {
+    pub fn new(
+        settings: Settings,
+        shortcut: Shortcut,
+        settings_path: PathBuf,
+        usage: UsageStore,
+    ) -> Self {
         Self {
             recording: Mutex::new(None),
             settings: Mutex::new(settings),
             shortcut: Mutex::new(shortcut),
             settings_path,
+            usage,
         }
     }
 
@@ -80,6 +88,11 @@ impl AppState {
 #[tauri::command]
 pub fn get_settings(state: State<AppState>) -> Settings {
     state.settings.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn get_usage(state: State<AppState>) -> UsageSnapshot {
+    state.usage.snapshot()
 }
 
 #[tauri::command]

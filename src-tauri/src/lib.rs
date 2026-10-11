@@ -1,9 +1,11 @@
 mod audio;
 mod cleanup;
+mod logger;
 mod paste;
 mod settings;
 mod status;
 mod transcribe;
+mod usage;
 
 use std::time::{Duration, Instant};
 
@@ -16,6 +18,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use settings::{AppState, Settings};
 use status::Status;
+use usage::{Totals, UsageStore};
 
 /// Clips shorter than this are treated as accidental taps.
 const MIN_CLIP_SECS: f32 = 0.3;
@@ -41,10 +44,10 @@ fn on_key_down(app: &AppHandle) {
         Ok(rec) => {
             *slot = Some(rec);
             status::set(app, Status::Listening);
-            println!("[hotkey] PRESSED - recording");
+            log::info!("recording started");
         }
         Err(e) => {
-            eprintln!("[audio] could not start recording: {e}");
+            log::error!("could not start recording: {e}");
             flash_error(app);
         }
     }
@@ -62,14 +65,14 @@ fn on_key_up(app: &AppHandle) {
         Ok(recording) => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                match process(recording, model, released_at).await {
+                match process(&app, recording, model, released_at).await {
                     Outcome::Pasted | Outcome::Discarded => status::set(&app, Status::Idle),
                     Outcome::Failed => flash_error(&app),
                 }
             });
         }
         Err(e) => {
-            eprintln!("[audio] could not stop recording: {e}");
+            log::error!("could not stop recording: {e}");
             flash_error(app);
         }
     }
@@ -88,81 +91,100 @@ fn flash_error(app: &AppHandle) {
     });
 }
 
-async fn process(recording: audio::Recording, model: String, released_at: Instant) -> Outcome {
+fn word_count(text: &str) -> u64 {
+    text.split_whitespace().count() as u64
+}
+
+async fn process(
+    app: &AppHandle,
+    recording: audio::Recording,
+    model: String,
+    released_at: Instant,
+) -> Outcome {
     let secs = recording.duration_secs();
-    println!(
-        "[audio] captured {secs:.2}s, peak {:.3}, rms {:.4}",
+    log::info!(
+        "captured {secs:.2}s of audio (peak {:.3}, rms {:.4})",
         recording.peak(),
         recording.rms()
     );
     if secs < MIN_CLIP_SECS {
-        println!("[audio] too short, discarded");
+        log::info!("clip too short, discarded");
         return Outcome::Discarded;
     }
     if recording.peak() < SILENCE_PEAK {
-        println!("[audio] silent, discarded");
+        log::info!("clip silent, discarded");
         return Outcome::Discarded;
     }
 
     let wav = match recording.to_wav() {
         Ok(w) => w,
         Err(e) => {
-            eprintln!("[audio] WAV encode failed: {e}");
+            log::error!("WAV encode failed: {e}");
             return Outcome::Failed;
         }
     };
-    // Debug aid: keep the last clip so capture quality can be checked by ear.
-    let debug_path = std::env::temp_dir().join("dictation-ai-last.wav");
-    if std::fs::write(&debug_path, &wav).is_ok() {
-        println!("[audio] saved {} ({} KB)", debug_path.display(), wav.len() / 1024);
+    // Debug builds only: keep the last clip so capture quality can be checked
+    // by ear. Release builds never write audio to disk.
+    if cfg!(debug_assertions) {
+        let debug_path = std::env::temp_dir().join("dictation-ai-last.wav");
+        if std::fs::write(&debug_path, &wav).is_ok() {
+            log::debug!("saved {} ({} KB)", debug_path.display(), wav.len() / 1024);
+        }
     }
 
-    let raw = match transcribe::transcribe(&wav).await {
-        Ok(text) if text.is_empty() => {
-            println!("[transcribe] empty result, nothing to paste");
+    let transcription = match transcribe::transcribe(&wav).await {
+        Ok(t) if t.text.is_empty() => {
+            log::info!("transcription was empty, nothing to paste");
             return Outcome::Discarded;
         }
-        Ok(text) => {
-            println!(
-                "[transcribe] {} ms after release: {text:?}",
-                released_at.elapsed().as_millis()
-            );
-            text
-        }
+        Ok(t) => t,
         Err(e) => {
-            eprintln!("[transcribe] failed: {e}");
+            log::error!("transcription failed: {e}");
             return Outcome::Failed;
         }
     };
+    log::info!(
+        "transcribed {} words in {} ms (cost ${:.5})",
+        word_count(&transcription.text),
+        released_at.elapsed().as_millis(),
+        transcription.cost_usd
+    );
+    log::debug!("transcript: {:?}", transcription.text);
 
-    let final_text = match cleanup::clean(&raw, &model).await {
+    let (cleaned, cleanup_cost) = cleanup::clean(&transcription.text, &model).await;
+    let final_text = match cleaned {
         Ok(text) => {
-            println!(
-                "[cleanup] {} ms after release ({model}): {text:?}",
+            log::info!(
+                "cleaned up with {model} at {} ms (cost ${cleanup_cost:.5})",
                 released_at.elapsed().as_millis()
             );
+            log::debug!("cleaned: {text:?}");
             text
         }
         Err(e) => {
-            eprintln!("[cleanup] failed, pasting raw transcript: {e}");
-            raw
+            log::warn!("clean-up failed with {model}, using raw transcript: {e}");
+            transcription.text
         }
     };
+
+    // Cost has been incurred by now, so tally it even if the paste fails.
+    app.state::<AppState>().usage.record(Totals {
+        audio_seconds: f64::from(secs),
+        words: word_count(&final_text),
+        cost_usd: transcription.cost_usd + cleanup_cost,
+    });
 
     match tauri::async_runtime::spawn_blocking(move || paste::paste_text(&final_text)).await {
         Ok(Ok(())) => {
-            println!(
-                "[paste] done, {} ms after release",
-                released_at.elapsed().as_millis()
-            );
+            log::info!("pasted, {} ms after release", released_at.elapsed().as_millis());
             Outcome::Pasted
         }
         Ok(Err(e)) => {
-            eprintln!("[paste] failed: {e}");
+            log::error!("paste failed: {e}");
             Outcome::Failed
         }
         Err(e) => {
-            eprintln!("[paste] task failed: {e}");
+            log::error!("paste task failed: {e}");
             Outcome::Failed
         }
     }
@@ -176,7 +198,7 @@ fn open_settings(app: &AppHandle) {
     }
     let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
         .title("Dictation AI Settings")
-        .inner_size(480.0, 400.0)
+        .inner_size(480.0, 560.0)
         .resizable(false)
         .build();
     match built {
@@ -191,7 +213,7 @@ fn open_settings(app: &AppHandle) {
             });
             let _ = window.set_focus();
         }
-        Err(e) => eprintln!("[app] could not open settings: {e}"),
+        Err(e) => log::error!("could not open settings: {e}"),
     }
 }
 
@@ -217,6 +239,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::get_defaults,
+            settings::get_usage,
             settings::list_input_devices,
             settings::set_input_device,
             settings::set_cleanup_model,
@@ -225,6 +248,10 @@ pub fn run() {
             settings::resume_hotkey,
         ])
         .setup(|app| {
+            let log_dir = app.path().app_log_dir()?;
+            logger::init(log_dir.clone());
+            log::info!("starting Dictation AI {}", env!("CARGO_PKG_VERSION"));
+
             // Menu bar only: no Dock icon, no app switcher entry.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(ActivationPolicy::Accessory);
@@ -233,24 +260,33 @@ pub fn run() {
             let mut loaded = Settings::load(&settings_path);
             // A hand-edited or stale hotkey must not stop the app starting.
             let shortcut: Shortcut = loaded.hotkey.parse().unwrap_or_else(|_| {
+                log::warn!("saved hotkey {:?} is invalid, using default", loaded.hotkey);
                 loaded.hotkey = settings::DEFAULT_HOTKEY.to_string();
                 settings::DEFAULT_HOTKEY.parse().expect("default hotkey is valid")
             });
             let hotkey_label = loaded.hotkey.clone();
-            app.manage(AppState::new(loaded, shortcut.clone(), settings_path));
+            let usage = UsageStore::load(app.path().app_data_dir()?.join("usage.json"));
+            app.manage(AppState::new(loaded, shortcut.clone(), settings_path, usage));
 
             let settings_item =
                 MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+            let logs_item =
+                MenuItem::with_id(app, "logs", "Show Logs in Finder", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Dictation AI", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&settings_item, &quit])?;
+            let menu = Menu::with_items(app, &[&settings_item, &logs_item, &quit])?;
 
             TrayIconBuilder::with_id(status::TRAY_ID)
                 .icon(status::initial_icon())
                 .icon_as_template(true)
                 .menu(&menu)
                 .tooltip("Dictation AI")
-                .on_menu_event(|app, event| match event.id().as_ref() {
+                .on_menu_event(move |app, event| match event.id().as_ref() {
                     "settings" => open_settings(app),
+                    "logs" => {
+                        if let Err(e) = std::process::Command::new("open").arg(&log_dir).spawn() {
+                            log::error!("could not open log folder: {e}");
+                        }
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -258,11 +294,11 @@ pub fn run() {
 
             // Surface the Accessibility prompt at launch rather than on first paste.
             if !paste::accessibility_trusted(true) {
-                println!("[app] Accessibility permission not granted yet (needed to paste)");
+                log::warn!("Accessibility permission not granted yet (needed to paste)");
             }
 
             app.global_shortcut().register(shortcut)?;
-            println!("[app] ready; hold {hotkey_label}, speak, release");
+            log::info!("ready; hold {hotkey_label}, speak, release");
             Ok(())
         })
         .build(tauri::generate_context!())
