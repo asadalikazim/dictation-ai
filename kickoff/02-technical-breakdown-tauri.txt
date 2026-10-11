@@ -37,9 +37,11 @@ coordinator that owns the state machine (section 4).
   transcribe  OpenRouter audio transcription call: WAV -> text.
   cleanup     OpenRouter chat call: system prompt + transcript -> text.
   paste       Clipboard write + synthesized Cmd+V + clipboard restore.
-  settings    Persisted non-secret config.
+  settings    Persisted non-secret config + the commands the UI uses.
   permissions Checks and prompts for mic + accessibility.
-  tray        Menu bar icon, status states, menu (Settings, Quit).
+  status      Menu bar icon states, drawn at runtime.
+  logger      Size-bounded rolling log files.
+  usage       Tally of audio seconds, words and cost.
 
 3.1 Hotkey
 - tauri-plugin-global-shortcut. Supports pressed AND released state in
@@ -156,6 +158,51 @@ Consequences to keep in mind:
 - Settings window created on demand; closing it hides it, app keeps running.
 - Optional later: launch at login (tauri-plugin-autostart).
 
+3.8 Logging
+- Own small logger behind the standard `log` crate facade (no extra
+  logging dependency), installed at startup in setup().
+- Location: the app log dir, ~/Library/Logs/<bundle id>/. The tray menu
+  has "Show Logs in Finder".
+- Rotation, with a hard total cap of 5 MB: at most 5 files of at most
+  1,000,000 bytes each. dictation-ai.log is current; dictation-ai.1.log
+  is the newest archive up to dictation-ai.4.log, which is deleted on the
+  next rotation. A file is rotated BEFORE a write that would exceed its
+  limit, so no file ever goes over, and a single message is truncated at
+  2,000 characters so one line cannot defeat the bound.
+- Line format: UTC ISO-8601 timestamp, level, message.
+- Privacy rule: only Info, Warn and Error go to disk. Anything that could
+  contain dictated text (transcripts, cleaned text) is logged at Debug,
+  which reaches stderr in debug builds only. Logs hold timings, sizes,
+  word counts, costs, model ids and errors. The API key is never logged.
+- The debug "last clip" WAV in the temp dir is written in debug builds
+  only; release builds never put audio on disk.
+- A panic hook routes panics into the log.
+- Tests cover: total size stays under the cap across 4x the cap of writes,
+  newest lines survive rotation, reopening appends, timestamp math.
+
+3.9 Usage tally
+- Six numbers: audio seconds, words and cost, each for the last 24 hours
+  and for all time.
+- Definitions:
+    audio seconds  duration of audio sent for transcription
+    words          words in the final text delivered (cleaned text, or
+                   the raw transcript if clean-up fell back)
+    cost           USD from the `usage.cost` field in the OpenRouter
+                   responses, transcription + clean-up combined. A
+                   rejected clean-up (e.g. too long) is still counted
+                   because it was billed; failed requests are not.
+- Storage: usage.json in the app data dir: running all-time totals plus a
+  list of per-dictation events for the last 24 hours only. Older events
+  are dropped on each write (their contribution already lives in the
+  all-time totals). Writes go to a temp file then rename, so a crash
+  cannot corrupt the file. A missing or corrupt file starts a fresh tally.
+- Recorded after clean-up and before paste, so cost is counted even if the
+  paste then fails. Discarded clips (too short, silent) cost nothing and
+  are not counted.
+- Shown in a Usage table in the settings window (refreshed when the
+  window gains focus) via a get_usage command.
+- Tests cover the 24 hour window and pruning.
+
 4. CORE FLOW (STATE MACHINE)
 ----------------------------
 States: Idle -> Recording -> Transcribing -> Cleaning -> Pasting -> Idle
@@ -224,15 +271,15 @@ dictation-ai/
     entitlements.plist
     src/
       main.rs                 bootstrap
-      app.rs                  coordinator + state machine
-      hotkey.rs
-      audio.rs
-      transcribe.rs
-      cleanup.rs
-      paste.rs
-      settings.rs
-      permissions.rs
-      tray.rs
+      lib.rs                  app setup, tray menu, hotkey handler, pipeline
+      audio.rs                capture, resample, WAV, device list
+      transcribe.rs           OpenRouter speech-to-text
+      cleanup.rs              OpenRouter clean-up pass
+      paste.rs                clipboard + Cmd+V, Accessibility check
+      settings.rs             settings file, shared state, UI commands
+      status.rs               tray icon states
+      logger.rs               rolling file logger
+      usage.rs                usage tally
 
 7. BUILD ORDER
 --------------
@@ -253,6 +300,8 @@ Each step should be demoable before moving on.
     retry of the last recording.
 10. Test pass: many apps, long and short clips, no network, bad key,
     unplugged mic, rapid key presses.
+11. Rolling file logs (3.8), replacing console prints.
+12. Usage tally (3.9) and the Usage table in settings.
 
 8. RISKS AND OPEN QUESTIONS
 ---------------------------

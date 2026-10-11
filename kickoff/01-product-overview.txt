@@ -63,6 +63,9 @@ PRINCIPLES
 - Honest about privacy. Both your recorded audio and the resulting text are
   sent to OpenRouter and its model providers. Privacy settings on the
   OpenRouter account should be configured accordingly.
+- Diagnosable without being invasive. Logs and the usage tally record what
+  happened (timings, sizes, word counts, costs, errors), never what was
+  said, and they stay on your machine.
 
 SCOPE
 -----
@@ -74,6 +77,9 @@ In scope (MVP):
 - Language-model clean-up pass with a fixed system prompt
 - Paste result at the cursor on hotkey release
 - Settings: hotkey, microphone, clean-up model
+- Rolling log files, capped at 5 MB in total, for troubleshooting
+- Usage tally: seconds of audio, words, and cost, each for the last 24
+  hours and for all time, shown in the settings window
 
 Out of scope (for now):
 - Local / offline speech recognition or language models (a possible later
@@ -83,7 +89,8 @@ Out of scope (for now):
 - Per-app tone or formatting adaptation
 - Custom dictionary or snippets
 - Editing selected text by voice
-- History, search, or transcript storage
+- History, search, or transcript storage (logs and the usage tally
+  deliberately hold no dictated text)
 - Multiple languages and auto-detection
 - Windows, Linux, iOS, or Android
 - Accounts, sync, or any backend of our own
