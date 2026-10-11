@@ -12,6 +12,17 @@ const MODEL: &str = "openai/whisper-1";
 #[derive(Deserialize)]
 struct TranscriptionResponse {
     text: String,
+    usage: Option<Usage>,
+}
+
+#[derive(Deserialize)]
+struct Usage {
+    cost: Option<f64>,
+}
+
+pub struct Transcription {
+    pub text: String,
+    pub cost_usd: f64,
 }
 
 #[derive(Deserialize)]
@@ -24,7 +35,7 @@ struct ErrorBody {
     message: String,
 }
 
-pub async fn transcribe(wav: &[u8]) -> Result<String, String> {
+pub async fn transcribe(wav: &[u8]) -> Result<Transcription, String> {
     let body = json!({
         "model": MODEL,
         "input_audio": {
@@ -58,5 +69,8 @@ pub async fn transcribe(wav: &[u8]) -> Result<String, String> {
 
     let parsed: TranscriptionResponse =
         serde_json::from_slice(&bytes).map_err(|e| format!("unexpected response: {e}"))?;
-    Ok(parsed.text.trim().to_string())
+    Ok(Transcription {
+        text: parsed.text.trim().to_string(),
+        cost_usd: parsed.usage.and_then(|u| u.cost).unwrap_or(0.0),
+    })
 }

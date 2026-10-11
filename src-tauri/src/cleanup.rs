@@ -18,6 +18,12 @@ Output ONLY the cleaned text, with no preamble, quotes, or explanation.";
 #[derive(Deserialize)]
 struct ChatResponse {
     choices: Vec<Choice>,
+    usage: Option<Usage>,
+}
+
+#[derive(Deserialize)]
+struct Usage {
+    cost: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -40,7 +46,16 @@ struct ErrorBody {
     message: String,
 }
 
-pub async fn clean(transcript: &str, model: &str) -> Result<String, String> {
+/// Returns the cleaned text (or why it could not be used) together with the
+/// cost incurred, which is non-zero even when the output was rejected.
+pub async fn clean(transcript: &str, model: &str) -> (Result<String, String>, f64) {
+    match request(transcript, model).await {
+        Ok((text, cost)) => (accept(transcript, text), cost),
+        Err(e) => (Err(e), 0.0),
+    }
+}
+
+async fn request(transcript: &str, model: &str) -> Result<(String, f64), String> {
     let body = json!({
         "model": model,
         "temperature": 0.2,
@@ -77,6 +92,7 @@ pub async fn clean(transcript: &str, model: &str) -> Result<String, String> {
 
     let parsed: ChatResponse =
         serde_json::from_slice(&bytes).map_err(|e| format!("unexpected response: {e}"))?;
+    let cost = parsed.usage.and_then(|u| u.cost).unwrap_or(0.0);
     let text = parsed
         .choices
         .into_iter()
@@ -84,7 +100,10 @@ pub async fn clean(transcript: &str, model: &str) -> Result<String, String> {
         .and_then(|c| c.message.content)
         .map(|t| t.trim().to_string())
         .unwrap_or_default();
+    Ok((text, cost))
+}
 
+fn accept(transcript: &str, text: String) -> Result<String, String> {
     if text.is_empty() {
         return Err("model returned empty output".to_string());
     }
