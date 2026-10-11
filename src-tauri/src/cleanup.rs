@@ -6,8 +6,6 @@ use serde::Deserialize;
 use serde_json::json;
 
 const ENDPOINT: &str = "https://openrouter.ai/api/v1/chat/completions";
-/// Placeholder default; becomes a setting later.
-const MODEL: &str = "anthropic/claude-haiku-5.5";
 
 const SYSTEM_PROMPT: &str = "You are a dictation clean-up tool inside a speech-to-text app. \
 The user message contains a raw transcript of speech inside <transcript> tags. \
@@ -42,9 +40,9 @@ struct ErrorBody {
     message: String,
 }
 
-pub async fn clean(transcript: &str) -> Result<String, String> {
+pub async fn clean(transcript: &str, model: &str) -> Result<String, String> {
     let body = json!({
-        "model": MODEL,
+        "model": model,
         "temperature": 0.2,
         "max_tokens": 2048,
         "provider": { "data_collection": "deny" },
