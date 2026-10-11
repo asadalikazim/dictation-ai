@@ -156,3 +156,48 @@ button:focus-visible {
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+.usage {
+  margin-top: 8px;
+  padding-top: 16px;
+}
+
+.usage h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 6px 0;
+  text-align: right;
+  font-weight: 400;
+}
+
+th:first-child,
+tbody th {
+  text-align: left;
+  color: var(--muted);
+}
+
+thead th {
+  color: var(--muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

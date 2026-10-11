@@ -44,6 +44,37 @@
       </section>
 
       <p id="saved" class="saved" aria-live="polite"></p>
+
+      <section class="usage" aria-labelledby="usage-title">
+        <h2 id="usage-title">Usage</h2>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col"><span class="visually-hidden">Measure</span></th>
+              <th scope="col">Last 24 hours</th>
+              <th scope="col">All time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Audio</th>
+              <td id="usage-audio-24h">–</td>
+              <td id="usage-audio-all">–</td>
+            </tr>
+            <tr>
+              <th scope="row">Words</th>
+              <td id="usage-words-24h">–</td>
+              <td id="usage-words-all">–</td>
+            </tr>
+            <tr>
+              <th scope="row">Cost</th>
+              <td id="usage-cost-24h">–</td>
+              <td id="usage-cost-all">–</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
       <p class="footnote">
         The OpenRouter API key is set when the app is built, from <code>.env</code>.
       </p>

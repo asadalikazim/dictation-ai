@@ -15,6 +15,9 @@ const microphoneReset = document.querySelector<HTMLButtonElement>("#microphone-r
 const modelReset = document.querySelector<HTMLButtonElement>("#model-reset")!;
 const savedNote = document.querySelector<HTMLElement>("#saved")!;
 
+type Totals = { audio_seconds: number; words: number; cost_usd: number };
+type Usage = { last_24h: Totals; all_time: Totals };
+
 const SYSTEM_DEFAULT = "";
 let settings: Settings;
 let defaults: Settings;
@@ -199,6 +202,37 @@ modelInput.addEventListener("keydown", (e) => {
 });
 modelReset.addEventListener("click", () => void saveModel(defaults.cleanup_model));
 
+// ---- usage ---------------------------------------------------------------
+
+function formatDuration(totalSeconds: number): string {
+  const s = Math.round(totalSeconds);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function formatCost(usd: number): string {
+  if (usd === 0) return "$0.00";
+  // Individual dictations cost fractions of a cent; keep them visible.
+  return usd < 1 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
+}
+
+function setCell(id: string, text: string): void {
+  document.querySelector<HTMLElement>(`#${id}`)!.textContent = text;
+}
+
+async function loadUsage(): Promise<void> {
+  const usage = await invoke<Usage>("get_usage");
+  const fill = (suffix: string, t: Totals): void => {
+    setCell(`usage-audio-${suffix}`, formatDuration(t.audio_seconds));
+    setCell(`usage-words-${suffix}`, t.words.toLocaleString());
+    setCell(`usage-cost-${suffix}`, formatCost(t.cost_usd));
+  };
+  fill("24h", usage.last_24h);
+  fill("all", usage.all_time);
+}
+
 // ---- init ----------------------------------------------------------------
 
 async function init(): Promise<void> {
@@ -206,9 +240,13 @@ async function init(): Promise<void> {
   settings = await invoke<Settings>("get_settings");
   renderHotkey();
   modelInput.value = settings.cleanup_model;
-  await loadDevices();
+  await Promise.all([loadDevices(), loadUsage()]);
 }
 
-// Microphones come and go; refresh the list whenever the window is focused.
-window.addEventListener("focus", () => void loadDevices());
+// Microphones come and go and dictations happen while this window is open
+// behind another; refresh both whenever the window is focused.
+window.addEventListener("focus", () => {
+  void loadDevices();
+  void loadUsage();
+});
 void init();
