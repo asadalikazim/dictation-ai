@@ -71,12 +71,22 @@ impl ActiveRecording {
     }
 }
 
-pub fn start() -> Result<ActiveRecording, String> {
+/// Names of the available input devices.
+pub fn list_input_devices() -> Vec<String> {
+    cpal::default_host()
+        .input_devices()
+        .map(|devices| devices.filter_map(|d| d.name().ok()).collect())
+        .unwrap_or_default()
+}
+
+/// Start recording from the named device, or the system default when `None`
+/// (or when the named device is no longer connected).
+pub fn start(device_name: Option<String>) -> Result<ActiveRecording, String> {
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let (result_tx, result_rx) = mpsc::channel::<Recording>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
 
-    thread::spawn(move || match open_stream() {
+    thread::spawn(move || match open_stream(device_name.as_deref()) {
         Ok((stream, buffer, source_rate)) => {
             let _ = ready_tx.send(Ok(()));
             let _ = stop_rx.recv();
@@ -97,10 +107,20 @@ pub fn start() -> Result<ActiveRecording, String> {
 
 type OpenStream = (cpal::Stream, Arc<Mutex<Vec<f32>>>, u32);
 
-fn open_stream() -> Result<OpenStream, String> {
+fn open_stream(device_name: Option<&str>) -> Result<OpenStream, String> {
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
+    let named = device_name.and_then(|wanted| {
+        let found = host
+            .input_devices()
+            .ok()?
+            .find(|d| d.name().is_ok_and(|n| n == wanted));
+        if found.is_none() {
+            eprintln!("[audio] input device {wanted:?} not found, using system default");
+        }
+        found
+    });
+    let device = named
+        .or_else(|| host.default_input_device())
         .ok_or("no input device available")?;
     let supported = device.default_input_config().map_err(|e| e.to_string())?;
     let sample_rate = supported.sample_rate().0;
