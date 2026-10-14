@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "dictation-ai",
+  "productName": "Dictation AI",
   "version": "0.1.0",
   "identifier": "com.asadkazim.dictationai",
   "build": {
@@ -30,7 +30,9 @@
       "resources/models/*"
     ],
     "macOS": {
-      "minimumSystemVersion": "15.0"
+      "minimumSystemVersion": "15.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": false
     }
   }
 }
