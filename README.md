@@ -25,6 +25,7 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 
 - Menu bar app: no Dock icon, no main window, with a status icon for idle, listening, processing and error
 - Configurable hotkey, microphone and transcription engine (cloud or a local model). The cloud transcription model and the clean-up model are picked from short lists, or set to any [OpenRouter](https://openrouter.ai/models) model ID.
+- Your OpenRouter key is entered in Settings and stored in the macOS Keychain, with a **Check key** button
 - A Usage window: audio seconds, words and cost for the last 24 hours and all time, split by transcription and clean-up
 - Size-capped rolling log files (5 MB total) that never contain what you said
 
@@ -37,7 +38,7 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 | Rust | via [rustup](https://rustup.rs) |
 | Node.js and npm | a current version; developed with Node 24 |
 | cmake | `brew install cmake`, needed to compile whisper.cpp |
-| An [OpenRouter](https://openrouter.ai) API key with credit | Needed for clean-up and for cloud transcription. OpenRouter required at least $0.50 of balance for audio requests when this was tested. |
+| An [OpenRouter](https://openrouter.ai) API key with credit | Needed for clean-up and for cloud transcription. You paste it into Settings after the first launch and it is stored in the macOS Keychain. OpenRouter required at least $0.50 of balance for audio requests when this was tested. |
 | About 15 GB of free disk space | 1.2 GB of models, plus build output: a development build is about 8.5 GB and a release build adds about 3.5 GB. |
 
 ## Setup
@@ -47,21 +48,19 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 git clone https://github.com/asadalikazim/dictation-ai.git
 cd dictation-ai
 
-# 2. Add your OpenRouter key (this file is gitignored)
-cp .env.example .env
-#    then edit .env and set OPENROUTER_API_KEY=...
-
-# 3. Download the Whisper models (about 1.2 GB, checksum-verified, resumable)
+# 2. Download the Whisper models (about 1.2 GB, checksum-verified, resumable)
 ./scripts/fetch-models.sh
 
-# 4. Install frontend dependencies
+# 3. Install frontend dependencies
 npm install
 
-# 5. Run in development
+# 4. Run in development
 npm run tauri dev
 ```
 
-The first build compiles whisper.cpp and takes a few minutes. The build fails with a clear message if `.env` or the model files are missing.
+The first build compiles whisper.cpp and takes a few minutes. The build fails with a clear message if the model files are missing.
+
+Then add your OpenRouter key: click the menu bar icon, choose **Settings…**, paste the key into **OpenRouter key**, and press **Save**. **Check key** confirms OpenRouter accepts it. Without a key, cloud transcription and clean-up cannot run; local transcription still works and pastes the raw transcript.
 
 To build the app itself:
 
@@ -77,6 +76,8 @@ macOS will ask for two permissions, and the app needs both:
 - **Microphone**, prompted on first use.
 - **Accessibility**, to send the paste keystroke. Enable it under System Settings > Privacy & Security > Accessibility.
 
+macOS may also ask whether the app can use the Keychain item that holds your key. Choose **Always Allow**. Development builds are re-signed on every rebuild, so you may be asked again after rebuilding.
+
 When running with `npm run tauri dev`, these attach to your terminal app rather than to Dictation AI. The built `.app` gets its own entries.
 
 ## Using it
@@ -84,7 +85,7 @@ When running with `npm run tauri dev`, these attach to your terminal app rather 
 Click the menu bar icon for:
 
 - **Usage…** to see what you have processed and what it cost
-- **Settings…** to change the hotkey, microphone, transcription engine and model, and clean-up model
+- **Settings…** to set your OpenRouter key and change the hotkey, microphone, transcription engine and model, and clean-up model
 - **Show Logs in Finder**
 - **Quit**
 
@@ -93,6 +94,7 @@ Click the menu bar icon for:
 | What | Where |
 |---|---|
 | Settings and usage tally | `~/Library/Application Support/com.asadkazim.dictationai/` (`settings.json`, `usage.json`) |
+| Your OpenRouter key | The macOS login Keychain: service `com.asadkazim.dictationai`, account `openrouter-api-key` (visible in Keychain Access). Never in a file. |
 | Logs | `~/Library/Logs/com.asadkazim.dictationai/` |
 | Whisper models in a built app | inside the app bundle, under `Contents/Resources/resources/models` |
 
@@ -100,7 +102,7 @@ The development run and the built app share the same data, because they share a 
 
 ## Things to know
 
-- **The API key is compiled into the app.** Anyone with the built `.app` can extract it, so don't share the build. Use a dedicated OpenRouter key with a spending limit.
+- **Your key is in the Keychain, not in the app or the repo.** The built app contains no key. Consider a dedicated OpenRouter key with a spending limit.
 - **Audio and text leave your machine** in cloud mode, and text does in local mode (for clean-up). Review your OpenRouter privacy settings.
 - **Local transcription works offline**, but clean-up then fails and the raw transcript is pasted, after about 15 seconds of retries.
 
@@ -108,7 +110,8 @@ The development run and the built app share the same data, because they share a 
 
 | Symptom | Fix |
 |---|---|
-| Build stops with "OPENROUTER_API_KEY is missing" | Create `.env` from `.env.example` and set the key. |
+| The error icon appears, or the logs say "No OpenRouter API key is set" | Open Settings and add your key, then use **Check key**. |
+| **Check key** says the key was rejected | The key is wrong, revoked, or from a different account. Create a new one on OpenRouter and use **Replace**. |
 | Build stops with "Whisper model files are missing" | Run `./scripts/fetch-models.sh`. |
 | Nothing is pasted | Check the Accessibility permission, and the menu bar icon (a red ring means an error). Look in the logs. |
 | whisper.cpp fails to build after changing the macOS version setting | `cargo clean -p whisper-rs-sys --release` in `src-tauri`, then rebuild. CMake caches the target. |

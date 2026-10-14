@@ -19,7 +19,6 @@ This document describes the app as built. Measurements in [3.11](#311-local-tran
 - Node.js and npm, for the frontend and the Tauri CLI.
 - cmake (`brew install cmake`), needed to compile whisper.cpp.
 - The model files: run `scripts/fetch-models.sh` once ([3.11](#311-local-transcription-whispercpp)).
-- A `.env` file with `OPENROUTER_API_KEY` ([3.6](#36-settings-and-the-api-key)).
 
 ## 3. Components
 
@@ -30,6 +29,7 @@ Each is a Rust module with a narrow interface, wired together in `lib.rs`, which
 | `lib.rs` | App setup, tray menu, hotkey handler, windows, the dictation pipeline |
 | `audio.rs` | Lists input devices, records from the selected one, resamples, encodes WAV |
 | `openrouter.rs` | Shared HTTP client, error parsing, automatic retries |
+| `apikey.rs` | The OpenRouter key: Keychain storage, in-memory cache, validation, key check |
 | `transcribe.rs` | OpenRouter audio transcription: WAV to text |
 | `local.rs` | whisper.cpp inference and the bundled model catalogue |
 | `cleanup.rs` | OpenRouter chat call: system prompt plus transcript to cleaned text |
@@ -149,21 +149,25 @@ Non-secret settings live in `settings.json` in the app config directory:
 
 A missing or unreadable file, or an invalid saved hotkey, falls back to defaults rather than blocking startup.
 
-The API key is a **build-time constant**, not a runtime setting:
+The API key is **not** in `settings.json` and is **not** compiled into the app. It lives in the macOS Keychain:
 
-- A `.env` file at the repo root holds `OPENROUTER_API_KEY=...`. It is gitignored; `.env.example` documents the variable.
-- `src-tauri/build.rs` loads `.env` (dotenvy), fails the build with a clear message if the variable is missing, and emits `cargo:rustc-env=OPENROUTER_API_KEY=...`. It also emits `cargo:rerun-if-changed=../.env` so changing the key triggers a rebuild.
-- Rust code reads it with `env!("OPENROUTER_API_KEY")`.
-- The key exists only in the Rust binary. It is not exposed through any frontend environment mechanism and is never sent to a window.
-- The same mechanism works for `tauri dev` and `tauri build`.
-- The key and full request headers are never logged.
+- **Storage**: a generic-password item in the user's login keychain, service `com.asadkazim.dictationai`, account `openrouter-api-key`, through the `keyring-core` crate and the `apple-native-keyring-store` crate (its `keychain` feature). The umbrella `keyring` crate was not used, because its default features also pull in Windows and Linux stores that this app does not need.
+- **Caching**: the key is read once at startup into an in-memory cache and updated when saved or removed, so requests never touch the Keychain (each read can trigger a permission prompt).
+- **The UI never receives the key.** The settings window gets whether one is set and its last four characters, and the input field is write-only.
+- **Settings row**: a masked field with Save. Once saved it shows "Saved …ab12" with **Check key**, **Replace** and **Remove**.
+- **Check key** makes a single request to `GET /api/v1/key` (no retries, since a person is waiting) and reports one of: valid (with usage and the remaining limit, if the key has one), rejected (HTTP 401 or 403), or unreachable.
+- **Validation**: surrounding whitespace is trimmed and the key must contain no whitespace. No other format is enforced.
+- **No key**: OpenRouter calls fail immediately with "No OpenRouter API key is set. Add one in Settings." and are not retried. With local transcription this means clean-up fails and the raw transcript is pasted, so local dictation still works.
+- **Logging**: the key and request headers are never logged. Only "saved" and "removed" events are.
+- **Build**: the build no longer reads `.env` or any key, and the executable contains none. A developer's own `.env` file is ignored by the build and stays gitignored.
+- **Tests**: validation and the four-character hint are unit tests. A round trip against the real login Keychain (create, read, replace, delete, under a throwaway service name) is an ignored test, `cargo test --lib keychain_round_trip -- --ignored`, and it passed on the development machine.
 
 Consequences:
 
-- Anyone with the built `.app` can extract the key (for example with `strings`). Fine for personal use on your own Mac; never share or upload the build.
-- Rotating the key means rebuilding.
-- Mitigation: create a dedicated OpenRouter key for this app and set a spending limit on it.
-- If this ever needs to be shared, switch to Keychain storage with an in-app entry field (the `keyring` crate); the rest of the app would be unchanged.
+- **Keychain access prompts.** macOS trusts a Keychain item per application signature. Development and release builds are ad-hoc signed, so the signature changes with each rebuild and macOS may ask again whether to allow access. **Always Allow** answers it for that build; a stable signing certificate would stop it. This is expected macOS behaviour; it has not yet been observed here.
+- The development run and the built app use the same Keychain item, since the service and account are the same.
+- Rotating the key is done in Settings and needs no rebuild.
+- Mitigation for cost: create a dedicated OpenRouter key for this app and set a spending limit on it.
 
 ### 3.7 Tray and app shell
 
@@ -214,6 +218,7 @@ Clean-up has no audio figure because it never touches audio.
 - **Backoff**: 0.5, 1, 2, 4, 8 s between attempts, capped at 10 s. A `Retry-After` header from the server is honoured within that cap.
 - Every failed attempt is logged at Warn with its reason and the wait; success after retries logs at Info; giving up logs at Error.
 - The worst case is long: 6 attempts of up to the request timeout (30 s for transcription, 15 s for clean-up) plus about 15 s of waiting. If that proves too slow in practice, add an overall deadline.
+- A missing API key is a permanent failure: it fails immediately and is not retried.
 - If transcription ultimately fails there is no text to paste. If clean-up ultimately fails, the raw transcript is pasted.
 - The HTTP client is created once and reused, so connections are pooled.
 - Tests cover status classification, the backoff schedule, retry then succeed, no retry on permanent failures, and giving up after 5 retries.
@@ -240,7 +245,7 @@ The total is about 1.21 GB. The first two are English-only.
 - `build.rs` fails the build with a clear message if any file is missing.
 - `tauri.conf.json` lists `resources/models/*` under `bundle.resources`, so the files end up inside the app at `Contents/Resources/resources/models`. Debug builds read the source-tree copy directly.
 - **Minimum macOS is 15.0** (`bundle.macOS.minimumSystemVersion`). Tauri's default of 10.13 breaks the whisper.cpp compile (`std::filesystem` needs 10.15), and targets between 10.15 and 14 break the link, because ggml's Metal code uses macOS 15 APIs behind a runtime availability check that needs a compiler support library Rust's link step does not include. CMake caches the deployment target, so after changing it run `cargo clean -p whisper-rs-sys --release` before rebuilding.
-- Verified: `npm run tauri build -- --bundles app` produces a 1.13 GiB app whose models folder holds all three files with matching SHA-256, and the API key appears once, in the executable.
+- Verified: `npm run tauri build -- --bundles app` produces a 1.13 GiB app whose models folder holds all three files with matching SHA-256.
 
 **Runtime behaviour.**
 
@@ -304,11 +309,12 @@ Idle -> Recording -> Transcribing -> Cleaning -> Pasting -> Idle
 |---|---|---|
 | Microphone | Recording | `NSMicrophoneUsageDescription` in `src-tauri/Info.plist` (merged into the app's Info.plist). macOS prompts on first capture. |
 | Accessibility | Posting the Cmd+V keystroke | Checked with `AXIsProcessTrustedWithOptions`; the prompt is requested at launch and re-checked on every paste, since users toggle it. Enable under System Settings > Privacy & Security > Accessibility. |
+| Keychain access | Reading and writing the OpenRouter key | Prompted by macOS when the app first uses its item, and possibly again after a rebuild because the signature changes. Answer **Always Allow**. |
 | Input Monitoring | Only if a modifier-only hotkey is added later | Not used today |
 
 - **App Sandbox is off**: sandboxed apps cannot post events to other apps.
 - **Network**: outbound HTTPS only.
-- **No entitlements file** is used, and the app is not notarised, which is fine for personal use. Sharing it would require signing and notarisation, and replacing the baked-in key ([3.6](#36-settings-and-the-api-key)).
+- **No entitlements file** is used, and the app is not notarised, which is fine for personal use. Sharing it would require signing and notarisation. The build contains no key.
 - **Dev versus built app**: under `tauri dev`, permissions attach to the terminal host rather than to Dictation AI, and may reset between rebuilds. The built `.app` has a stable identity (`com.asadkazim.dictationai`). Both share the same settings, usage and log directories because they share that identifier.
 
 ## 6. Project structure
@@ -318,8 +324,6 @@ dictation-ai/
   README.md                   overview and setup
   PRODUCT_OVERVIEW.md         what and why
   TECHNICAL_BREAKDOWN.md      this document
-  .env                        OPENROUTER_API_KEY (gitignored)
-  .env.example                variable name only, no value
   index.html                  settings window page
   usage.html                  usage window page
   vite.config.ts              two-page build
@@ -331,7 +335,7 @@ dictation-ai/
     styles.css                shared styles
   src-tauri/
     Cargo.toml
-    build.rs                  loads .env, bakes the key in, checks the models exist
+    build.rs                  checks the model files exist
     tauri.conf.json
     Info.plist                microphone usage description
     capabilities/             window permissions
@@ -339,6 +343,7 @@ dictation-ai/
     src/
       main.rs                 bootstrap
       lib.rs                  setup, tray menu, hotkey handler, windows, pipeline
+      apikey.rs               OpenRouter key: Keychain, cache, check
       audio.rs                capture, resample, WAV, device list
       transcribe.rs           OpenRouter speech-to-text
       local.rs                whisper.cpp engine and model catalogue
@@ -356,7 +361,7 @@ dictation-ai/
 
 Each step was demoable before moving on.
 
-1. Scaffold the Tauri v2 app; menu bar icon; no Dock icon; Quit works. Set up `.env`, `build.rs` and `.gitignore` before any code uses the key.
+1. Scaffold the Tauri v2 app; menu bar icon; no Dock icon; Quit works. Set up `.env`, `build.rs` and `.gitignore` before any code uses the key. (This stage used a build-time key; step 16 moved it to the Keychain.)
 2. Hotkey press and release logged to the console; configurable combo.
 3. Mic permission and recording while held; write a WAV to disk and listen to it to confirm capture and resampling.
 4. Send that WAV to OpenRouter transcription; print the text.
@@ -371,6 +376,7 @@ Each step was demoable before moving on.
 13. Automatic retries for OpenRouter calls ([3.10](#310-automatic-retries)).
 14. Local transcription with bundled models, engine toggle and model picker in settings ([3.11](#311-local-transcription-whispercpp)).
 15. Drop-downs for the cloud transcription model ([3.3](#33-cloud-transcription-openrouter)) and the clean-up model ([3.4](#34-clean-up-openrouter)), each with an "Other…" free-text entry.
+16. OpenRouter key entered in Settings and stored in the macOS Keychain, with a Check key button; the build-time `.env` reading was removed ([3.6](#36-settings-and-the-api-key)).
 
 ## 8. Risks and open items
 
@@ -382,7 +388,7 @@ Each step was demoable before moving on.
 - **Non-US keyboard layouts** may paste the wrong key ([3.5](#35-paste)).
 - **Upload size and speed** on slow connections, for long dictations in cloud mode.
 - **Spend control**: a dedicated key with a limit, plus the recording length cap, bound the cost of bugs.
-- **The API key is in the binary** ([3.6](#36-settings-and-the-api-key)).
+- **Keychain prompts** after rebuilding a development build ([3.6](#36-settings-and-the-api-key)); a stable signing identity would remove them.
 - **Minimum macOS 15** and a 1.1 GB app, from the bundled models.
 - **Streaming versus batch**: transcription is batch (after release). Streaming is a later optimisation.
 - **Language**: English only.
@@ -397,5 +403,5 @@ When memory looks high in Activity Monitor during development, `rust-analyzer` (
 - Default hotkey: Option+Space, changeable in settings.
 - Frontend: plain TypeScript, no framework.
 - No on-screen indicator beyond the menu bar icon.
-- API key set at build time, not in the app.
+- API key entered in Settings and stored in the macOS Keychain (it started as a build-time `.env` value).
 - Local transcription is bundled, not downloaded, and has no fallback to the cloud.

@@ -39,12 +39,13 @@ Two steps, each with a clear home:
 - **Speech-to-text** runs either in the cloud (OpenAI's Whisper through OpenRouter, `openai/whisper-1`) or locally on your Mac (whisper.cpp with one of three bundled models). You choose in settings; cloud is the default.
 - **Text clean-up** always uses OpenRouter, by default Claude Haiku 5.5 (`anthropic/claude-haiku-5.5`).
 
-There is a single secret, the OpenRouter API key, and it is supplied when the app is built rather than entered in the app. Local transcription needs no key and no network; clean-up still does.
+There is a single secret, the OpenRouter API key. You enter it in Settings and it is stored in the macOS Keychain; it is not compiled into the app or kept in the repository. Local transcription needs no key and no network; clean-up still does, so with no key local dictation pastes the raw transcript.
 
 The three local models ship inside the app, so switching to local mode needs no download. They are fetched once when the app is built, not stored in git.
 
 ## What you can configure (in the app)
 
+- Your OpenRouter API key, which can be checked against OpenRouter from the same screen
 - The hotkey that triggers dictation
 - Which microphone is used
 - Whether transcription runs in the cloud or on this Mac, which cloud model does it, and which of the three bundled models to use when it runs locally
@@ -71,7 +72,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Speech-to-text in the cloud (OpenRouter Whisper) or locally (whisper.cpp, three bundled models), chosen in settings, with no fallback between them
 - Language-model clean-up pass with a fixed system prompt
 - Paste the result at the cursor on hotkey release
-- Settings: hotkey, microphone, transcription engine, cloud and local transcription models, clean-up model
+- Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, transcription engine, cloud and local transcription models, clean-up model
 - Automatic retries of transient OpenRouter failures
 - Rolling log files, capped at 5 MB in total, for troubleshooting
 - Usage tally, in its own Usage window opened from the menu bar icon, for the last 24 hours and for all time, split by stage: transcription (audio seconds, words, cost) and clean-up (words, cost), plus a total cost
@@ -81,7 +82,6 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Local language models for the clean-up step (local speech recognition is in scope; local clean-up is a possible later experiment)
 - Downloading models inside the app (they ship bundled)
 - Fallback between cloud and local transcription
-- Entering the API key in the app (it is set at build time)
 - Voice commands ("make this shorter", "delete that")
 - Per-app tone or formatting adaptation
 - Custom dictionary or snippets
@@ -110,6 +110,6 @@ You can use it all day as your default way to enter text in any app, and it rare
 - The bundled models make the built app about 1.2 GB.
 - In cloud mode, two network round trips (transcribe, then clean up) sit between key release and paste, so latency is the main thing to watch. Local mode removes one of them.
 - Audio (cloud mode) and text leave the machine. This is accepted in exchange for a much simpler app.
-- The API key is built into the app, so the built app must be treated as private and not shared.
+- The OpenRouter key sits in your login Keychain, so macOS may ask for permission to use it, especially after rebuilding a development build.
 - The app needs two system permissions (microphone and accessibility) that the user must grant manually.
 - The built app requires macOS 15 or later.
