@@ -247,6 +247,7 @@ The total is about 1.21 GB. The first two are English-only.
 - Only the selected model is held in memory; switching drops the old one first.
 - The model is loaded in the background when local mode is selected or the app starts in local mode, so the first dictation does not pay the load. A cold first load from disk was observed at about 8 s; warm loads are about 200 ms.
 - Inference runs on a blocking thread.
+- **Memory.** With `large-v3-turbo-q5_0` loaded, a development build of the app measured 623 MB physical footprint (916 MB resident, which overstates it by counting shared mappings), measured with macOS `footprint`. About 548 MB of that is anonymous allocations, consistent with the 574 MB model file, and the remaining ~75 MB is the Rust heap, the WebKit framework and Metal bookkeeping. Each open Settings or Usage window adds its own WebKit process on top. Two known behaviours, deliberately left as they are (see [section 8](#8-risks-and-open-items)): the model is not unloaded when the engine is switched to Cloud, and there is no idle unload.
 - **No fallback.** A local failure is logged, the error icon is shown, and nothing is pasted; the user can switch engine in settings.
 - Settings are `engine` (`cloud` or `local`, default `cloud`) and `local_model`. A single "Reset to default" restores both. Older settings files without these fields load with the defaults.
 - whisper.cpp output is routed into the app logger (the `log_backend` feature) and only warnings and errors are kept, because the library emits per-token debug lines.
@@ -375,6 +376,7 @@ Each step was demoable before moving on.
 
 - **Latency** in cloud mode: two sequential API calls. If too slow, options are streaming the clean-up response, shortening the prompt, or offering a "skip clean-up" setting.
 - **Retry worst case** is long when the network is down ([3.10](#310-automatic-retries)). An overall deadline would bound it.
+- **The local model stays resident.** Switching the engine to Cloud does not unload it, so its ~550 MB is held until another local model is loaded or the app quits, and there is no idle unload. Both are known and left as they are for now; the fixes would be to drop the model when the engine changes to Cloud, and optionally after N idle minutes (at the cost of a reload on the next dictation: about 0.2 s with the file cached, about 8 s cold).
 - **Bluetooth microphones** switch profiles and sample rates when the mic opens; the resampler handles the rate change, but quality differs from a built-in mic.
 - **Cmd+V synthesis** has been exercised in a small number of apps; behaviour in terminals, remote desktops and secure fields is not established.
 - **Non-US keyboard layouts** may paste the wrong key ([3.5](#35-paste)).
@@ -385,6 +387,10 @@ Each step was demoable before moving on.
 - **Streaming versus batch**: transcription is batch (after release). Streaming is a later optimisation.
 - **Language**: English only.
 - **Not built yet**: launch at login, a modifier-only hotkey, hands-free mode, an on-screen recording indicator.
+
+### Development environment note
+
+When memory looks high in Activity Monitor during development, `rust-analyzer` (the VS Code Rust extension's language server, about 1.6 GB here, plus two small proc-macro helpers) is the editor's analysis of this project and its large dependency graph (Tauri, whisper-rs and hundreds of crates). It is not the app and does not grow with the transcription model. Restarting the server from the command palette frees it.
 
 ## 9. Decisions taken since the plan
 
