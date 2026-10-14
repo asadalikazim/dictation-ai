@@ -15,9 +15,10 @@ must be verified against current docs before relying on them. Items marked
   settings window. It reads and writes settings via Tauri commands.
 - No hidden-webview logic, so macOS throttling of hidden web content cannot
   affect recording or the hotkey.
-- All AI goes through OpenRouter. No local models. This removes the
-  whisper-rs / cmake / Metal / model-download work from the plan entirely.
-  (Local transcription can be added later behind the same interface.)
+- Clean-up always goes through OpenRouter. Transcription is a user choice
+  between OpenRouter's hosted Whisper (default) and local whisper.cpp with
+  three models bundled into the app (section 3.11). There is deliberately
+  no automatic fallback between the two engines.
 
 2. TOOLCHAIN SETUP
 ------------------
@@ -25,6 +26,8 @@ must be verified against current docs before relying on them. Items marked
   required for Tauri/Rust builds. [VERIFY] whether any step needs it.
 - Rust via rustup.
 - Node.js + a package manager, for the frontend and the Tauri CLI.
+- cmake (brew install cmake), needed to compile whisper.cpp.
+- The model files: run scripts/fetch-models.sh once (section 3.11).
 - If upgrading macOS, do it before installing/updating developer tools.
 
 3. COMPONENTS
@@ -35,6 +38,7 @@ coordinator that owns the state machine (section 4).
   hotkey      Detects hotkey press and release.
   audio       Lists input devices, records from the selected one, encodes WAV.
   openrouter  Shared HTTP client, error parsing and automatic retries.
+  local       whisper.cpp inference with models bundled in the app.
   transcribe  OpenRouter audio transcription call: WAV -> text.
   cleanup     OpenRouter chat call: system prompt + transcript -> text.
   paste       Clipboard write + synthesized Cmd+V + clipboard restore.
@@ -227,6 +231,71 @@ Consequences to keep in mind:
 - Tests cover status classification, the backoff schedule, retry then
   succeed, no retry on permanent failures, and giving up after 5 retries.
 
+3.11 Local transcription (whisper.cpp)
+- Binding: whisper-rs (whisper.cpp compiled by cmake) with the `metal`
+  feature, so inference runs on the Apple GPU. Metal shaders are embedded
+  in the library (GGML_METAL_EMBED_LIBRARY), so no Xcode is needed.
+- Input: the recording is already 16 kHz mono f32, which is what whisper
+  expects, so no conversion happens. Greedy decoding, English forced,
+  no cross-call context, blank and non-speech tokens suppressed.
+- Models (all three bundled; sizes and SHA-256 pinned in
+  scripts/fetch-models.sh, taken from the Hugging Face repository):
+    id                    file                          size
+    base.en               ggml-base.en.bin              148 MB (141 MiB)
+    small.en              ggml-small.en.bin             488 MB (465 MiB)
+    large-v3-turbo-q5_0   ggml-large-v3-turbo-q5_0.bin  574 MB (547 MiB)
+  Total about 1.21 GB. The first two are English-only. Default: small.en.
+- Packaging: scripts/fetch-models.sh downloads the files into
+  src-tauri/resources/models/ (gitignored), verifies each checksum, skips
+  valid files and resumes interrupted downloads. build.rs fails the build
+  with a clear message if any file is missing. tauri.conf.json lists
+  resources/models/* under bundle.resources, so the files end up inside
+  the .app (Contents/Resources/resources/models). Debug builds read the
+  source-tree copy directly.
+- Minimum macOS is 15.0 (bundle.macOS.minimumSystemVersion). Tauri's
+  default of 10.13 breaks the whisper.cpp compile (std::filesystem needs
+  10.15), and targets between 10.15 and 14 break the link, because ggml's
+  Metal code uses macOS 15 APIs behind a runtime availability check that
+  needs a compiler support library Rust's link step does not include.
+  CMake caches the deployment target, so after changing it run
+  `cargo clean -p whisper-rs-sys --release` before rebuilding.
+- Verified: `npm run tauri build -- --bundles app` produces a 1.13 GiB
+  .app whose Contents/Resources/resources/models holds all three files
+  with matching SHA-256, and the API key appears once, in the executable.
+- Memory: only the selected model is held in memory; switching drops the
+  old one first. The model is loaded in the background when local mode is
+  selected or the app starts in local mode, so the first dictation does
+  not pay the load. Inference runs on a blocking thread.
+- Settings: engine (cloud | local, default cloud) and local_model. A
+  single "Reset to default" restores both. Older settings files without
+  these fields load with the defaults.
+- Failure: no fallback. A local failure is logged, the error icon is shown
+  and nothing is pasted; the user can switch engine in settings.
+- Usage tally: local runs record audio seconds and words with cost 0.
+- whisper.cpp / GGML output is routed into the app logger (whisper-rs
+  log_backend feature); only warnings and errors are kept, because the
+  library emits per-token debug lines.
+
+Measured on this machine (M1 Pro, 32 GB, Metal, greedy decoding), using
+speech synthesised with macOS `say`; each figure is repeatable across
+three consecutive runs. Inference time is per call:
+    model                 load    7.3 s clip   22.4 s clip   process RSS
+    base.en               164 ms    ~176 ms      ~355 ms       ~320 MB
+    small.en              188 ms    ~401 ms      ~773 ms       ~745 MB
+    large-v3-turbo-q5_0   217 ms   ~1270 ms     ~1465 ms       ~850 MB
+- RSS is the whole test process after loading that model; models were
+  loaded one after another in the same process, so it includes memory the
+  allocator kept from earlier ones. Treat it as an upper bound.
+- Load times are with the file already in the OS page cache.
+- The turbo model's time barely changes between the two clips because
+  Whisper's encoder always processes a fixed 30 second window.
+- Synthetic speech is clean; real microphone audio will differ, mostly in
+  accuracy. There is a benchmark test (ignored by default) in local.rs:
+    BENCH_WAVS=a.wav,b.wav cargo test --lib bench_models -- --ignored --nocapture
+- Reference figures from upstream (whisper.cpp README): disk base 142 MiB,
+  small 466 MiB; memory base ~388 MB, small ~852 MB. The README gives no
+  memory figure for large-v3-turbo or any quantised model.
+
 4. CORE FLOW (STATE MACHINE)
 ----------------------------
 States: Idle -> Recording -> Transcribing -> Cleaning -> Pasting -> Idle
@@ -286,12 +355,15 @@ dictation-ai/
   .env                        OPENROUTER_API_KEY (gitignored)
   .env.example                variable name only, no value
   .gitignore
+  scripts/
+    fetch-models.sh           downloads + verifies the bundled models
   src/                        frontend: settings window only
   src-tauri/
     Cargo.toml
     build.rs                  loads .env, bakes key into the build
     tauri.conf.json
     Info.plist                custom keys (mic usage description)
+    resources/models/         Whisper models (gitignored, from the script)
     entitlements.plist
     src/
       main.rs                 bootstrap
@@ -300,6 +372,7 @@ dictation-ai/
       transcribe.rs           OpenRouter speech-to-text
       cleanup.rs              OpenRouter clean-up pass
       openrouter.rs           shared client, retries, error parsing
+      local.rs                whisper.cpp engine + model catalogue
       paste.rs                clipboard + Cmd+V, Accessibility check
       settings.rs             settings file, shared state, UI commands
       status.rs               tray icon states
@@ -328,6 +401,8 @@ Each step should be demoable before moving on.
 11. Rolling file logs (3.8), replacing console prints.
 12. Usage tally (3.9) and the Usage table in settings.
 13. Automatic retries for OpenRouter calls (3.10).
+14. Local transcription with bundled models, engine toggle and model
+    picker in settings (3.11).
 
 8. RISKS AND OPEN QUESTIONS
 ---------------------------

@@ -40,17 +40,26 @@ The raw transcript passes through a language model that is told to:
 
 HOW IT IS POWERED
 -----------------
-One online service, OpenRouter, handles both steps:
-- speech-to-text with OpenAI's Whisper (openai/whisper-1)
-- text clean-up with Claude Haiku 5.5 (anthropic/claude-haiku-5.5)
+Two steps, each with a clear home:
+- Speech-to-text runs either in the cloud (OpenAI's Whisper through
+  OpenRouter, openai/whisper-1) or locally on your Mac (whisper.cpp with one
+  of three bundled models). You choose in settings; cloud is the default.
+- Text clean-up always uses OpenRouter, by default Claude Haiku 5.5
+  (anthropic/claude-haiku-5.5).
 
 There is a single secret, the OpenRouter API key, and it is supplied when the
-app is built rather than entered in the app.
+app is built rather than entered in the app. Local transcription needs no
+key and no network; clean-up still does.
+
+The three local models ship inside the app, so switching to local mode needs
+no download. They are fetched once when the app is built, not stored in git.
 
 WHAT YOU CAN CONFIGURE (in the app)
 -----------------------------------
 - The hotkey that triggers dictation
 - Which microphone is used
+- Whether transcription runs in the cloud or on this Mac, and which of the
+  three bundled models to use when it runs locally
 - Which language model does the clean-up
 
 PRINCIPLES
@@ -74,17 +83,21 @@ In scope (MVP):
 - Menu bar presence with a status indicator (idle / listening / processing)
 - Hold-to-talk hotkey, configurable
 - Microphone selection
-- Speech-to-text via OpenRouter (Whisper)
+- Speech-to-text in the cloud (OpenRouter Whisper) or locally (whisper.cpp,
+  three bundled models), chosen in settings, with no fallback between them
 - Language-model clean-up pass with a fixed system prompt
 - Paste result at the cursor on hotkey release
-- Settings: hotkey, microphone, clean-up model
+- Settings: hotkey, microphone, transcription engine and local model,
+  clean-up model
 - Rolling log files, capped at 5 MB in total, for troubleshooting
 - Usage tally: seconds of audio, words, and cost, each for the last 24
   hours and for all time, shown in the settings window
 
 Out of scope (for now):
-- Local / offline speech recognition or language models (a possible later
-  experiment)
+- Local language models for the clean-up step (local speech recognition
+  is in scope; local clean-up is a possible later experiment)
+- Downloading models inside the app (they ship bundled)
+- Fallback between cloud and local transcription
 - Entering the API key in the app (it is set at build time)
 - Voice commands ("make this shorter", "delete that")
 - Per-app tone or formatting adaptation
@@ -102,7 +115,6 @@ Possible later additions, once the MVP feels good:
 - Hands-free / toggle mode
 - Personal vocabulary for names and jargon
 - A small on-screen indicator while recording
-- Local transcription for offline use and audio privacy
 
 SUCCESS LOOKS LIKE
 ------------------
@@ -111,7 +123,10 @@ rarely gets in your way.
 
 KNOWN TRADE-OFFS
 ----------------
-- It needs an internet connection. Without one, dictation does not work.
+- Cloud transcription and the clean-up step need an internet connection.
+  Local transcription works offline, but clean-up then fails and the raw
+  transcript is pasted instead.
+- The bundled models make the built app about 1.2 GB.
 - Two network round trips (transcribe, then clean up) sit between key release
   and paste, so latency is the main thing to watch.
 - Audio and text leave the machine. This is accepted in exchange for a much
