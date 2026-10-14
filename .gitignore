@@ -27,3 +27,6 @@ dist-ssr
 # Rust / Tauri
 src-tauri/target
 src-tauri/gen
+
+# Whisper models are fetched by scripts/fetch-models.sh, never committed
+src-tauri/resources/models/
