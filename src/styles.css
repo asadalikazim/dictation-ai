@@ -211,6 +211,17 @@ button:focus-visible {
   transition: opacity 0.3s;
 }
 
+.link[hidden],
+.segmented button:disabled {
+  display: none;
+}
+
+.segmented button:disabled {
+  display: inline-block;
+  opacity: 0.45;
+  cursor: default;
+}
+
 .saved.error {
   color: var(--danger);
 }
