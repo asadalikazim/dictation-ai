@@ -57,8 +57,9 @@ PRINCIPLES
 ----------
 - Simple over feature-rich. Fewer controls, fewer surprises.
 - Fast. The time between releasing the key and seeing text should feel short.
-- Never lose what you said. If clean-up fails, you still get the raw
-  transcript pasted.
+- Never lose what you said. Temporary failures talking to OpenRouter are
+  retried automatically and silently (up to five times). If clean-up still
+  fails, you get the raw transcript pasted.
 - One service, one key. Pay-as-you-go, costing pennies at personal volumes.
 - Honest about privacy. Both your recorded audio and the resulting text are
   sent to OpenRouter and its model providers. Privacy settings on the
