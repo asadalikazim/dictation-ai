@@ -19,6 +19,7 @@ dotenvy = "0.15"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2"
 log = { version = "0.4", features = ["std"] }
+tokio = { version = "1", features = ["time"] }
 cpal = "0.16"
 arboard = "3"
 core-graphics = "0.24"
