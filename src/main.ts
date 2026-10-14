@@ -13,6 +13,13 @@ type Settings = {
 
 type LocalModel = { id: string; label: string; size_mb: number };
 type ModelOption = { id: string; label: string };
+
+type KeyStatus = { set: boolean; hint: string | null };
+type KeyCheck =
+  | { status: "no_key" }
+  | { status: "valid"; usage: number | null; limit_remaining: number | null }
+  | { status: "rejected" }
+  | { status: "unreachable"; message: string };
 type CloudCatalog = { transcription: ModelOption[]; cleanup: ModelOption[] };
 
 const hotkeyButton = document.querySelector<HTMLButtonElement>("#hotkey")!;
@@ -37,6 +44,114 @@ let settings: Settings;
 let defaults: Settings;
 let recording = false;
 let savedTimer: number | undefined;
+
+// ---- OpenRouter key ------------------------------------------------------
+
+const keyEntry = document.querySelector<HTMLElement>("#key-entry")!;
+const keyInput = document.querySelector<HTMLInputElement>("#api-key")!;
+const keySave = document.querySelector<HTMLButtonElement>("#key-save")!;
+const keySaved = document.querySelector<HTMLElement>("#key-saved")!;
+const keyHint = document.querySelector<HTMLElement>("#key-hint")!;
+const keyActions = document.querySelector<HTMLElement>("#key-actions")!;
+const keyCheck = document.querySelector<HTMLButtonElement>("#key-check")!;
+const keyReplace = document.querySelector<HTMLButtonElement>("#key-replace")!;
+const keyRemove = document.querySelector<HTMLButtonElement>("#key-remove")!;
+const keyMessage = document.querySelector<HTMLElement>("#key-message")!;
+
+function setKeyMessage(text: string, tone: "" | "ok" | "error" = ""): void {
+  keyMessage.textContent = text;
+  keyMessage.classList.toggle("ok", tone === "ok");
+  keyMessage.classList.toggle("error", tone === "error");
+}
+
+/** Show the entry field, or the saved summary with its actions. */
+function renderKey(status: KeyStatus, entering = false): void {
+  const showEntry = !status.set || entering;
+  keyEntry.hidden = !showEntry;
+  keySaved.hidden = showEntry;
+  keyActions.hidden = showEntry;
+  keyHint.textContent = status.hint ?? "";
+  keyInput.value = "";
+  if (showEntry) keyInput.focus();
+}
+
+function formatUsd(amount: number): string {
+  return `$${amount.toFixed(amount < 1 ? 4 : 2)}`;
+}
+
+async function saveKey(): Promise<void> {
+  const key = keyInput.value;
+  keySave.disabled = true;
+  try {
+    const status = await invoke<KeyStatus>("set_api_key", { key });
+    renderKey(status);
+    setKeyMessage("");
+    flashSaved();
+  } catch (err) {
+    setKeyMessage(String(err), "error");
+  } finally {
+    keySave.disabled = false;
+  }
+}
+
+async function checkKey(): Promise<void> {
+  setKeyMessage("Checking…");
+  keyCheck.disabled = true;
+  try {
+    const result = await invoke<KeyCheck>("check_api_key");
+    switch (result.status) {
+      case "valid": {
+        const used = result.usage === null ? "" : ` Used ${formatUsd(result.usage)}.`;
+        const left =
+          result.limit_remaining === null
+            ? " No spending limit on this key."
+            : ` ${formatUsd(result.limit_remaining)} left under this key's limit.`;
+        setKeyMessage(`Valid.${used}${left}`, "ok");
+        break;
+      }
+      case "rejected":
+        setKeyMessage("OpenRouter rejected this key. Replace it with a valid one.", "error");
+        break;
+      case "no_key":
+        setKeyMessage("No key is saved yet.", "error");
+        break;
+      case "unreachable":
+        setKeyMessage(`Could not check the key: ${result.message}`, "error");
+        break;
+    }
+  } finally {
+    keyCheck.disabled = false;
+  }
+}
+
+async function removeKey(): Promise<void> {
+  try {
+    const status = await invoke<KeyStatus>("clear_api_key");
+    renderKey(status);
+    setKeyMessage("Key removed. Add one to use clean-up and cloud transcription.");
+  } catch (err) {
+    setKeyMessage(String(err), "error");
+  }
+}
+
+keySave.addEventListener("click", () => void saveKey());
+keyInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") void saveKey();
+});
+keyCheck.addEventListener("click", () => void checkKey());
+keyReplace.addEventListener("click", () => {
+  setKeyMessage("");
+  renderKey({ set: true, hint: keyHint.textContent }, true);
+});
+keyRemove.addEventListener("click", () => void removeKey());
+
+async function loadKey(): Promise<void> {
+  const status = await invoke<KeyStatus>("get_api_key_status");
+  renderKey(status);
+  if (!status.set) {
+    setKeyMessage("Add your key to enable clean-up and cloud transcription.");
+  }
+}
 
 // ---- helpers -------------------------------------------------------------
 
@@ -354,6 +469,7 @@ async function init(): Promise<void> {
   defaults = await invoke<Settings>("get_defaults");
   settings = await invoke<Settings>("get_settings");
   renderHotkey();
+  await loadKey();
   const catalog = await invoke<CloudCatalog>("list_cloud_models");
   cleanupPicker = createModelPicker({
     select: cleanupSelect,

@@ -140,6 +140,69 @@ button:focus-visible {
   color: var(--danger);
 }
 
+.message.ok {
+  color: var(--ok);
+}
+
+.key-entry {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.key-entry[hidden],
+.key-saved[hidden],
+.key-actions[hidden] {
+  display: none;
+}
+
+.key-entry input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--fg);
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: text;
+  cursor: text;
+}
+
+.button {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.key-saved {
+  margin: 0;
+  font-weight: 600;
+}
+
+.key-saved span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.key-actions {
+  display: flex;
+  gap: 14px;
+}
+
 .saved {
   min-height: 18px;
   margin: 12px 0 0;
