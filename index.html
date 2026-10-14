@@ -34,6 +34,22 @@
 
       <section class="row">
         <div class="label">
+          <span id="engine-label" class="label-text">Transcription</span>
+          <p class="hint">Where speech becomes text.</p>
+        </div>
+        <div class="control">
+          <div class="segmented" role="radiogroup" aria-labelledby="engine-label">
+            <button id="engine-cloud" type="button" role="radio" aria-checked="true">Cloud</button>
+            <button id="engine-local" type="button" role="radio" aria-checked="false">On this Mac</button>
+          </div>
+          <select id="local-model" aria-label="Local model" hidden></select>
+          <p id="engine-hint" class="message"></p>
+          <button id="transcription-reset" type="button" class="link">Reset to default</button>
+        </div>
+      </section>
+
+      <section class="row">
+        <div class="label">
           <label for="model">Clean-up model</label>
           <p class="hint">Any model ID from OpenRouter.</p>
         </div>

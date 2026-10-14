@@ -1,10 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 
+type Engine = "cloud" | "local";
+
 type Settings = {
   hotkey: string;
   input_device: string | null;
   cleanup_model: string;
+  engine: Engine;
+  local_model: string;
 };
+
+type LocalModel = { id: string; label: string; size_mb: number };
 
 const hotkeyButton = document.querySelector<HTMLButtonElement>("#hotkey")!;
 const hotkeyMessage = document.querySelector<HTMLElement>("#hotkey-message")!;
@@ -13,6 +19,11 @@ const modelInput = document.querySelector<HTMLInputElement>("#model")!;
 const hotkeyReset = document.querySelector<HTMLButtonElement>("#hotkey-reset")!;
 const microphoneReset = document.querySelector<HTMLButtonElement>("#microphone-reset")!;
 const modelReset = document.querySelector<HTMLButtonElement>("#model-reset")!;
+const engineCloud = document.querySelector<HTMLButtonElement>("#engine-cloud")!;
+const engineLocal = document.querySelector<HTMLButtonElement>("#engine-local")!;
+const localModelSelect = document.querySelector<HTMLSelectElement>("#local-model")!;
+const engineHint = document.querySelector<HTMLElement>("#engine-hint")!;
+const transcriptionReset = document.querySelector<HTMLButtonElement>("#transcription-reset")!;
 const savedNote = document.querySelector<HTMLElement>("#saved")!;
 
 type Totals = { audio_seconds: number; words: number; cost_usd: number };
@@ -65,6 +76,8 @@ function updateResetButtons(): void {
   hotkeyReset.disabled = settings.hotkey === defaults.hotkey;
   microphoneReset.disabled = settings.input_device === defaults.input_device;
   modelReset.disabled = settings.cleanup_model === defaults.cleanup_model;
+  transcriptionReset.disabled =
+    settings.engine === defaults.engine && settings.local_model === defaults.local_model;
 }
 
 // ---- hotkey recording ----------------------------------------------------
@@ -202,6 +215,57 @@ modelInput.addEventListener("keydown", (e) => {
 });
 modelReset.addEventListener("click", () => void saveModel(defaults.cleanup_model));
 
+// ---- transcription engine ------------------------------------------------
+
+const ENGINE_HINTS: Record<Engine, string> = {
+  cloud: "OpenRouter's hosted Whisper. Audio is sent online; about $0.006 per minute.",
+  local: "Runs on this Mac. Free, and your audio never leaves it.",
+};
+
+async function loadLocalModels(): Promise<void> {
+  const models = await invoke<LocalModel[]>("list_local_models");
+  localModelSelect.replaceChildren();
+  for (const m of models) {
+    const option = document.createElement("option");
+    option.value = m.id;
+    option.textContent = `${m.label} · ${m.size_mb} MB`;
+    localModelSelect.append(option);
+  }
+}
+
+function renderEngine(): void {
+  const local = settings.engine === "local";
+  engineCloud.setAttribute("aria-checked", String(!local));
+  engineLocal.setAttribute("aria-checked", String(local));
+  localModelSelect.hidden = !local;
+  localModelSelect.value = settings.local_model;
+  engineHint.textContent = ENGINE_HINTS[settings.engine];
+  updateResetButtons();
+}
+
+async function chooseEngine(engine: Engine): Promise<void> {
+  if (settings.engine === engine) return;
+  settings = await invoke<Settings>("set_engine", { engine });
+  renderEngine();
+  flashSaved();
+}
+
+engineCloud.addEventListener("click", () => void chooseEngine("cloud"));
+engineLocal.addEventListener("click", () => void chooseEngine("local"));
+
+localModelSelect.addEventListener("change", async () => {
+  settings = await invoke<Settings>("set_local_model", { model: localModelSelect.value });
+  renderEngine();
+  flashSaved();
+});
+
+transcriptionReset.addEventListener("click", async () => {
+  await invoke<Settings>("set_engine", { engine: defaults.engine });
+  settings = await invoke<Settings>("set_local_model", { model: defaults.local_model });
+  renderEngine();
+  flashSaved();
+});
+
 // ---- usage ---------------------------------------------------------------
 
 function formatDuration(totalSeconds: number): string {
@@ -240,6 +304,8 @@ async function init(): Promise<void> {
   settings = await invoke<Settings>("get_settings");
   renderHotkey();
   modelInput.value = settings.cleanup_model;
+  await loadLocalModels();
+  renderEngine();
   await Promise.all([loadDevices(), loadUsage()]);
 }
 
