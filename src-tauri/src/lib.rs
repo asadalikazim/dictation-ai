@@ -180,26 +180,29 @@ async fn process(
     log::debug!("transcript: {:?}", transcription.text);
 
     let (cleaned, cleanup_cost) = cleanup::clean(&transcription.text, &model).await;
-    let final_text = match cleaned {
+    let (final_text, cleanup_words) = match cleaned {
         Ok(text) => {
             log::info!(
                 "cleaned up with {model} at {} ms (cost ${cleanup_cost:.5})",
                 released_at.elapsed().as_millis()
             );
             log::debug!("cleaned: {text:?}");
-            text
+            let words = word_count(&text);
+            (text, words)
         }
         Err(e) => {
             log::warn!("clean-up failed with {model}, using raw transcript: {e}");
-            transcription.text
+            (transcription.text.clone(), 0)
         }
     };
 
     // Cost has been incurred by now, so tally it even if the paste fails.
     app.state::<AppState>().usage.record(Totals {
         audio_seconds: f64::from(secs),
-        words: word_count(&final_text),
-        cost_usd: transcription.cost_usd + cleanup_cost,
+        transcription_words: word_count(&transcription.text),
+        transcription_cost_usd: transcription.cost_usd,
+        cleanup_words,
+        cleanup_cost_usd: cleanup_cost,
     });
 
     match tauri::async_runtime::spawn_blocking(move || paste::paste_text(&final_text)).await {
@@ -218,8 +221,16 @@ async fn process(
     }
 }
 
-fn open_settings(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("settings") {
+/// Show the window with this label, creating it on first use. Closing a
+/// window destroys it, so it is rebuilt the next time it is opened.
+fn open_window(
+    app: &AppHandle,
+    label: &str,
+    page: &str,
+    title: &str,
+    size: (f64, f64),
+) -> Option<tauri::WebviewWindow> {
+    if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.set_focus();
         return;
