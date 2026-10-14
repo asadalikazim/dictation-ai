@@ -67,6 +67,7 @@ fn on_key_up(app: &AppHandle) {
         let s = state.settings.lock().unwrap();
         Job {
             model: s.cleanup_model.clone(),
+            cleanup_enabled: s.cleanup_enabled,
             engine: s.engine,
             cloud_model: s.cloud_transcription_model.clone(),
             local_model: s.local_model.clone(),
@@ -108,6 +109,8 @@ fn flash_error(app: &AppHandle) {
 struct Job {
     /// Clean-up model.
     model: String,
+    /// Whether the clean-up step runs at all.
+    cleanup_enabled: bool,
     engine: Engine,
     /// OpenRouter transcription model, used when the engine is Cloud.
     cloud_model: String,
@@ -124,7 +127,7 @@ async fn process(
     job: Job,
     released_at: Instant,
 ) -> Outcome {
-    let Job { model, engine, cloud_model, local_model } = job;
+    let Job { model, cleanup_enabled, engine, cloud_model, local_model } = job;
     let secs = recording.duration_secs();
     log::info!(
         "captured {secs:.2}s of audio (peak {:.3}, rms {:.4})",
@@ -187,21 +190,26 @@ async fn process(
     );
     log::debug!("transcript: {:?}", transcription.text);
 
-    let (cleaned, cleanup_cost) = cleanup::clean(&transcription.text, &model).await;
-    let (final_text, cleanup_words) = match cleaned {
-        Ok(text) => {
-            log::info!(
-                "cleaned up with {model} at {} ms (cost ${cleanup_cost:.5})",
-                released_at.elapsed().as_millis()
-            );
-            log::debug!("cleaned: {text:?}");
-            let words = word_count(&text);
-            (text, words)
+    let (final_text, cleanup_words, cleanup_cost) = if cleanup_enabled {
+        let (cleaned, cleanup_cost) = cleanup::clean(&transcription.text, &model).await;
+        match cleaned {
+            Ok(text) => {
+                log::info!(
+                    "cleaned up with {model} at {} ms (cost ${cleanup_cost:.5})",
+                    released_at.elapsed().as_millis()
+                );
+                log::debug!("cleaned: {text:?}");
+                let words = word_count(&text);
+                (text, words, cleanup_cost)
+            }
+            Err(e) => {
+                log::warn!("clean-up failed with {model}, using raw transcript: {e}");
+                (transcription.text.clone(), 0, cleanup_cost)
+            }
         }
-        Err(e) => {
-            log::warn!("clean-up failed with {model}, using raw transcript: {e}");
-            (transcription.text.clone(), 0)
-        }
+    } else {
+        log::info!("clean-up is turned off; pasting the raw transcript");
+        (transcription.text.clone(), 0, 0.0)
     };
 
     // Cost has been incurred by now, so tally it even if the paste fails.
@@ -266,7 +274,7 @@ fn open_settings(app: &AppHandle) {
         "settings",
         "index.html",
         "Dictation AI Settings",
-        (480.0, 760.0),
+        (480.0, 790.0),
     ) else {
         return;
     };
@@ -319,6 +327,7 @@ pub fn run() {
             settings::set_local_model,
             settings::set_input_device,
             settings::set_cleanup_model,
+            settings::set_cleanup_enabled,
             settings::set_hotkey,
             settings::pause_hotkey,
             settings::resume_hotkey,

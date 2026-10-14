@@ -19,7 +19,7 @@ pub const DEFAULT_LOCAL_MODEL: &str = "small.en";
 pub const DEFAULT_CLOUD_TRANSCRIPTION_MODEL: &str = "openai/whisper-1";
 
 /// Where speech is turned into text.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum Engine {
     /// OpenRouter's hosted Whisper.
@@ -36,6 +36,9 @@ pub struct Settings {
     /// Input device name; `None` means the system default.
     pub input_device: Option<String>,
     pub cleanup_model: String,
+    /// When false the clean-up step is skipped and the raw transcript is
+    /// pasted, whether or not an API key is saved.
+    pub cleanup_enabled: bool,
     pub engine: Engine,
     /// OpenRouter model used when `engine` is Cloud.
     pub cloud_transcription_model: String,
@@ -49,6 +52,7 @@ impl Default for Settings {
             hotkey: DEFAULT_HOTKEY.to_string(),
             input_device: None,
             cleanup_model: DEFAULT_CLEANUP_MODEL.to_string(),
+            cleanup_enabled: true,
             engine: Engine::default(),
             cloud_transcription_model: DEFAULT_CLOUD_TRANSCRIPTION_MODEL.to_string(),
             local_model: DEFAULT_LOCAL_MODEL.to_string(),
@@ -182,6 +186,11 @@ pub fn set_cleanup_model(state: State<AppState>, model: String) -> Result<Settin
 }
 
 #[tauri::command]
+pub fn set_cleanup_enabled(state: State<AppState>, enabled: bool) -> Result<Settings, String> {
+    state.update(|s| s.cleanup_enabled = enabled)
+}
+
+#[tauri::command]
 pub fn set_cloud_transcription_model(
     state: State<AppState>,
     model: String,
@@ -231,4 +240,31 @@ pub fn register_current(app: &AppHandle, state: &AppState) {
     let current = state.shortcut.lock().unwrap().clone();
     // Already registered is fine; this is idempotent on purpose.
     let _ = app.global_shortcut().register(current);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_up_is_on_by_default() {
+        assert!(Settings::default().cleanup_enabled);
+    }
+
+    #[test]
+    fn a_settings_file_from_before_the_toggle_loads_with_clean_up_on() {
+        let old = r#"{"hotkey":"Alt+Space","cleanup_model":"anthropic/claude-haiku-5.5",
+                      "engine":"local","local_model":"small.en"}"#;
+        let loaded: Settings = serde_json::from_str(old).unwrap();
+        assert!(loaded.cleanup_enabled);
+        assert_eq!(loaded.engine, Engine::Local);
+    }
+
+    #[test]
+    fn the_switch_survives_a_round_trip() {
+        let mut s = Settings::default();
+        s.cleanup_enabled = false;
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(!serde_json::from_str::<Settings>(&json).unwrap().cleanup_enabled);
+    }
 }
