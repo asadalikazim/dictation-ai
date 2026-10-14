@@ -1,5 +1,6 @@
 mod audio;
 mod cleanup;
+mod local;
 mod logger;
 mod openrouter;
 mod paste;
@@ -17,7 +18,7 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use settings::{AppState, Settings};
+use settings::{AppState, Engine, Settings};
 use status::Status;
 use usage::{Totals, UsageStore};
 
@@ -60,13 +61,17 @@ fn on_key_up(app: &AppHandle) {
         return;
     };
     let released_at = Instant::now();
-    let model = state.settings.lock().unwrap().cleanup_model.clone();
+    let (model, engine, local_model) = {
+        let s = state.settings.lock().unwrap();
+        (s.cleanup_model.clone(), s.engine, s.local_model.clone())
+    };
+    let job = Job { model, engine, local_model };
     status::set(app, Status::Processing);
     match active.stop() {
         Ok(recording) => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                match process(&app, recording, model, released_at).await {
+                match process(&app, recording, job, released_at).await {
                     Outcome::Pasted | Outcome::Discarded => status::set(&app, Status::Idle),
                     Outcome::Failed => flash_error(&app),
                 }
@@ -92,6 +97,15 @@ fn flash_error(app: &AppHandle) {
     });
 }
 
+/// Settings captured when the key was released, so a change in the settings
+/// window cannot affect a dictation that is already in flight.
+struct Job {
+    /// Clean-up model.
+    model: String,
+    engine: Engine,
+    local_model: String,
+}
+
 fn word_count(text: &str) -> u64 {
     text.split_whitespace().count() as u64
 }
@@ -99,9 +113,10 @@ fn word_count(text: &str) -> u64 {
 async fn process(
     app: &AppHandle,
     recording: audio::Recording,
-    model: String,
+    job: Job,
     released_at: Instant,
 ) -> Outcome {
+    let Job { model, engine, local_model } = job;
     let secs = recording.duration_secs();
     log::info!(
         "captured {secs:.2}s of audio (peak {:.3}, rms {:.4})",
@@ -117,36 +132,48 @@ async fn process(
         return Outcome::Discarded;
     }
 
-    let wav = match recording.to_wav() {
-        Ok(w) => w,
-        Err(e) => {
-            log::error!("WAV encode failed: {e}");
-            return Outcome::Failed;
+    let started = Instant::now();
+    let (result, engine_label) = match engine {
+        Engine::Cloud => {
+            let result = match recording.to_wav() {
+                Ok(wav) => {
+                    // Debug builds only: keep the last clip so capture quality can
+                    // be checked by ear. Release builds never write audio to disk.
+                    if cfg!(debug_assertions) {
+                        let path = std::env::temp_dir().join("dictation-ai-last.wav");
+                        if std::fs::write(&path, &wav).is_ok() {
+                            log::debug!("saved {} ({} KB)", path.display(), wav.len() / 1024);
+                        }
+                    }
+                    transcribe::transcribe(&wav).await
+                }
+                Err(e) => Err(format!("WAV encode failed: {e}")),
+            };
+            (result, "cloud".to_string())
         }
+        Engine::Local => (
+            local::transcribe(app, &local_model, recording.samples).await,
+            format!("local {local_model}"),
+        ),
     };
-    // Debug builds only: keep the last clip so capture quality can be checked
-    // by ear. Release builds never write audio to disk.
-    if cfg!(debug_assertions) {
-        let debug_path = std::env::temp_dir().join("dictation-ai-last.wav");
-        if std::fs::write(&debug_path, &wav).is_ok() {
-            log::debug!("saved {} ({} KB)", debug_path.display(), wav.len() / 1024);
-        }
-    }
 
-    let transcription = match transcribe::transcribe(&wav).await {
+    // No fallback between engines: a failure is reported, and the user can
+    // switch engines in settings.
+    let transcription = match result {
         Ok(t) if t.text.is_empty() => {
             log::info!("transcription was empty, nothing to paste");
             return Outcome::Discarded;
         }
         Ok(t) => t,
         Err(e) => {
-            log::error!("transcription failed: {e}");
+            log::error!("transcription failed ({engine_label}): {e}");
             return Outcome::Failed;
         }
     };
     log::info!(
-        "transcribed {} words in {} ms (cost ${:.5})",
+        "transcribed {} words ({engine_label}) in {} ms, {} ms after release (cost ${:.5})",
         word_count(&transcription.text),
+        started.elapsed().as_millis(),
         released_at.elapsed().as_millis(),
         transcription.cost_usd
     );
@@ -199,7 +226,7 @@ fn open_settings(app: &AppHandle) {
     }
     let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
         .title("Dictation AI Settings")
-        .inner_size(480.0, 560.0)
+        .inner_size(480.0, 680.0)
         .resizable(false)
         .build();
     match built {
@@ -242,6 +269,9 @@ pub fn run() {
             settings::get_defaults,
             settings::get_usage,
             settings::list_input_devices,
+            settings::list_local_models,
+            settings::set_engine,
+            settings::set_local_model,
             settings::set_input_device,
             settings::set_cleanup_model,
             settings::set_hotkey,
@@ -251,6 +281,8 @@ pub fn run() {
         .setup(|app| {
             let log_dir = app.path().app_log_dir()?;
             logger::init(log_dir.clone());
+            // Route whisper.cpp / GGML output through our logger.
+            whisper_rs::install_logging_hooks();
             log::info!("starting Dictation AI {}", env!("CARGO_PKG_VERSION"));
 
             // Menu bar only: no Dock icon, no app switcher entry.
@@ -266,6 +298,7 @@ pub fn run() {
                 settings::DEFAULT_HOTKEY.parse().expect("default hotkey is valid")
             });
             let hotkey_label = loaded.hotkey.clone();
+            let preload_model = (loaded.engine == Engine::Local).then(|| loaded.local_model.clone());
             let usage = UsageStore::load(app.path().app_data_dir()?.join("usage.json"));
             app.manage(AppState::new(loaded, shortcut.clone(), settings_path, usage));
 
@@ -296,6 +329,10 @@ pub fn run() {
             // Surface the Accessibility prompt at launch rather than on first paste.
             if !paste::accessibility_trusted(true) {
                 log::warn!("Accessibility permission not granted yet (needed to paste)");
+            }
+
+            if let Some(model) = preload_model {
+                local::preload(app.handle(), &model);
             }
 
             app.global_shortcut().register(shortcut)?;

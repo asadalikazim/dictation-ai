@@ -86,6 +86,11 @@ impl Log for FileLogger {
         if !self.enabled(record.metadata()) {
             return;
         }
+        // whisper.cpp is chatty (per-token debug lines, hardware dumps).
+        // Keep its warnings and errors, drop the rest.
+        if record.target().starts_with("whisper_rs") && record.level() > Level::Warn {
+            return;
+        }
         let mut message = record.args().to_string();
         if message.chars().count() > MAX_MESSAGE_CHARS {
             message = message.chars().take(MAX_MESSAGE_CHARS).collect::<String>() + "…";
