@@ -27,6 +27,7 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 - Configurable hotkey, microphone and transcription engine (cloud or a local model). The cloud transcription model and the clean-up model are picked from short lists, or set to any [OpenRouter](https://openrouter.ai/models) model ID.
 - Your OpenRouter key is entered in Settings and stored in the macOS Keychain, with a **Check key** button
 - A Usage window: audio seconds, words and cost for the last 24 hours and all time, split by transcription and clean-up
+- Clean-up also lays out what you said: numbered lists from "firstly, secondly…", paragraph breaks, and emails with the greeting and sign-off on their own lines
 - Clean-up can be switched off; together with local transcription that gives a fully offline mode
 - Size-capped rolling log files (5 MB total) that never contain what you said
 
