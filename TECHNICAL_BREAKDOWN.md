@@ -46,6 +46,7 @@ Each is a Rust module with a narrow interface, wired together in `lib.rs`, which
 - The handler compares the event against the currently registered shortcut held in app state, so the hotkey can change at runtime.
 - The hotkey is user-configurable: the settings window captures a combo, and the backend unregisters the old shortcut, registers the new one, and rolls back if registration fails.
 - While a new hotkey is being recorded, the current one is paused so pressing it does not start a dictation. It is re-registered when recording ends, and again if the settings window is closed mid-capture.
+- If registration fails (the shortcut is held by another program, or by a second copy of this app), startup continues: the failure is logged, the error icon flashes, and the menu and Settings still work so the hotkey can be changed.
 - Key auto-repeat: repeated "pressed" events are ignored while already recording. Measured: a 5 second hold produced a single press and a single release.
 - Later option: a CGEventTap-based listener for modifier-only keys such as Fn. It would require the Input Monitoring permission.
 
@@ -305,6 +306,15 @@ Not a separate code path: it is what the existing pieces do together when nothin
 - Nothing leaves the machine in the first row. The usage tally still counts the audio seconds and words, at zero cost.
 - The switch is explicit, not automatic: the app does not try to detect that it is offline.
 
+### 3.13 Launch at login
+
+- Implemented with macOS's `SMAppService` (the `objc2-service-management` crate): the login item is the app bundle itself (`mainAppService`), registered and unregistered through the system. It appears under System Settings > General > Login Items, where the user can also revoke it.
+- Chosen over a LaunchAgent plist file (which would hard-code a path that goes stale if the app moves) and over `tauri-plugin-autostart` (which writes such a plist).
+- **The state belongs to macOS, not to `settings.json`**, and is read from the system whenever the Settings window opens or gains focus. Four states: Enabled, Disabled, Needs approval (registered but switched off in System Settings, with an **Open Login Items** button), and Unavailable (not running from a bundle, as under `tauri dev`; the control is disabled with an explanation).
+- Requires a code-signed bundle, which is why the build signs it ad hoc ([section 5](#5-permissions-and-packaging)). It is meaningful only for the built app, from a stable location such as `/Applications`.
+- The state is logged at startup (`launch at login: …`).
+- Tests cover the mapping from every system status to the four states and the serialised form the UI expects. The live registration itself can only be exercised from the built app.
+
 ## 4. Core flow
 
 ```text
@@ -339,7 +349,21 @@ Idle -> Recording -> Transcribing -> Cleaning -> Pasting -> Idle
 - **App Sandbox is off**: sandboxed apps cannot post events to other apps.
 - **Network**: outbound HTTPS only.
 - **No entitlements file** is used, and the app is not notarised, which is fine for personal use. Sharing it would require signing and notarisation. The build contains no key.
-- **Dev versus built app**: under `tauri dev`, permissions attach to the terminal host rather than to Dictation AI, and may reset between rebuilds. The built `.app` has a stable identity (`com.asadkazim.dictationai`). Both share the same settings, usage and log directories because they share that identifier.
+- **Dev versus built app**: under `tauri dev`, permissions attach to the terminal host rather than to Dictation AI, and may reset between rebuilds. The built `.app` has its own identity (`com.asadkazim.dictationai`) and gets its own microphone, Accessibility and Keychain prompts. Both share the same settings, usage and log directories, and the same Keychain item, because they share that identifier. They must not run at the same time: both want the hotkey.
+
+**Signing of the built app** (`bundle.macOS` in `tauri.conf.json`):
+
+| Setting | Value | Why |
+|---|---|---|
+| `signingIdentity` | `-` (ad hoc) | Without it only the executable carried the linker's automatic signature and the bundle failed `codesign --verify` ("code has no resources but signature indicates they must be present"). Launch at login needs a properly signed bundle. |
+| `hardenedRuntime` | `false` | Tauri turns it on when signing. Under it macOS blocks the microphone unless the app has the `com.apple.security.device.audio-input` entitlement, and we have none. It only matters for notarisation. Turning it on later means adding an entitlements file with that key. |
+| `minimumSystemVersion` | `15.0` | See [3.11](#311-local-transcription-whispercpp). |
+
+The product name is `Dictation AI` (`productName`), which names the bundle (`Dictation AI.app`), its display name, and the entry in Login Items. The executable inside is still `dictation-ai`, and the bundle identifier is unchanged, so the settings, usage, log and Keychain locations did not move.
+
+- The resulting signature is ad hoc with the bundle identifier as its identifier, sealed resources, and no entitlements; `codesign --verify --deep --strict` passes.
+- An ad-hoc signature's designated requirement is the binary's hash, so it changes with every build. macOS therefore treats each rebuild as a new program and may ask again for the microphone, Accessibility and Keychain access. A stable signing certificate would stop that; none is used.
+- Not notarised, which is fine for personal use.
 
 ## 6. Project structure
 
@@ -380,6 +404,7 @@ dictation-ai/
       catalog.rs              curated cloud model lists, model-id validation
       status.rs               tray icon states
       logger.rs               rolling file logger
+      login_item.rs           launch at login (SMAppService)
       usage.rs                usage tally
 ```
 
@@ -405,6 +430,7 @@ Each step was demoable before moving on.
 16. OpenRouter key entered in Settings and stored in the macOS Keychain, with a Check key button; the build-time `.env` reading was removed ([3.6](#36-settings-and-the-api-key)).
 17. A clean-up On/Off switch, which with local transcription gives a fully offline mode ([3.12](#312-offline-mode)).
 18. A formatting-aware clean-up prompt with worked examples: lists, paragraphs, email layout, spoken URLs and numbers ([3.4](#34-clean-up-openrouter)).
+19. Launch at login through `SMAppService` ([3.13](#313-launch-at-login)), and a properly signed bundle for the built app ([section 5](#5-permissions-and-packaging)).
 
 ## 8. Risks and open items
 
@@ -420,7 +446,8 @@ Each step was demoable before moving on.
 - **Minimum macOS 15** and a 1.1 GB app, from the bundled models.
 - **Streaming versus batch**: transcription is batch (after release). Streaming is a later optimisation.
 - **Language**: English only.
-- **Not built yet**: launch at login, a modifier-only hotkey, hands-free mode, an on-screen recording indicator.
+- **Not built yet**: a modifier-only hotkey, hands-free mode, an on-screen recording indicator.
+- **Permission re-prompts after each rebuild** of the built app, because the ad-hoc signature changes ([section 5](#5-permissions-and-packaging)).
 
 ### Development environment note
 
