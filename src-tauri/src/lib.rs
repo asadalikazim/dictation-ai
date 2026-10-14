@@ -1,4 +1,5 @@
 mod audio;
+mod catalog;
 mod cleanup;
 mod local;
 mod logger;
@@ -61,11 +62,15 @@ fn on_key_up(app: &AppHandle) {
         return;
     };
     let released_at = Instant::now();
-    let (model, engine, local_model) = {
+    let job = {
         let s = state.settings.lock().unwrap();
-        (s.cleanup_model.clone(), s.engine, s.local_model.clone())
+        Job {
+            model: s.cleanup_model.clone(),
+            engine: s.engine,
+            cloud_model: s.cloud_transcription_model.clone(),
+            local_model: s.local_model.clone(),
+        }
     };
-    let job = Job { model, engine, local_model };
     status::set(app, Status::Processing);
     match active.stop() {
         Ok(recording) => {
@@ -103,6 +108,8 @@ struct Job {
     /// Clean-up model.
     model: String,
     engine: Engine,
+    /// OpenRouter transcription model, used when the engine is Cloud.
+    cloud_model: String,
     local_model: String,
 }
 
@@ -116,7 +123,7 @@ async fn process(
     job: Job,
     released_at: Instant,
 ) -> Outcome {
-    let Job { model, engine, local_model } = job;
+    let Job { model, engine, cloud_model, local_model } = job;
     let secs = recording.duration_secs();
     log::info!(
         "captured {secs:.2}s of audio (peak {:.3}, rms {:.4})",
@@ -145,11 +152,11 @@ async fn process(
                             log::debug!("saved {} ({} KB)", path.display(), wav.len() / 1024);
                         }
                     }
-                    transcribe::transcribe(&wav).await
+                    transcribe::transcribe(&wav, &cloud_model).await
                 }
                 Err(e) => Err(format!("WAV encode failed: {e}")),
             };
-            (result, "cloud".to_string())
+            (result, format!("cloud {cloud_model}"))
         }
         Engine::Local => (
             local::transcribe(app, &local_model, recording.samples).await,
@@ -258,7 +265,7 @@ fn open_settings(app: &AppHandle) {
         "settings",
         "index.html",
         "Dictation AI Settings",
-        (480.0, 600.0),
+        (480.0, 680.0),
     ) else {
         return;
     };
@@ -301,6 +308,8 @@ pub fn run() {
             settings::get_usage,
             settings::list_input_devices,
             settings::list_local_models,
+            settings::list_cloud_models,
+            settings::set_cloud_transcription_model,
             settings::set_engine,
             settings::set_local_model,
             settings::set_input_device,

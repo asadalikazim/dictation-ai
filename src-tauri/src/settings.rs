@@ -9,12 +9,14 @@ use tauri::{AppHandle, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::audio;
+use crate::catalog;
 use crate::local;
 use crate::usage::{UsageSnapshot, UsageStore};
 
 pub const DEFAULT_HOTKEY: &str = "Alt+Space";
 pub const DEFAULT_CLEANUP_MODEL: &str = "anthropic/claude-haiku-5.5";
 pub const DEFAULT_LOCAL_MODEL: &str = "small.en";
+pub const DEFAULT_CLOUD_TRANSCRIPTION_MODEL: &str = "openai/whisper-1";
 
 /// Where speech is turned into text.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
@@ -35,6 +37,8 @@ pub struct Settings {
     pub input_device: Option<String>,
     pub cleanup_model: String,
     pub engine: Engine,
+    /// OpenRouter model used when `engine` is Cloud.
+    pub cloud_transcription_model: String,
     /// Which bundled model to use when `engine` is Local.
     pub local_model: String,
 }
@@ -46,6 +50,7 @@ impl Default for Settings {
             input_device: None,
             cleanup_model: DEFAULT_CLEANUP_MODEL.to_string(),
             engine: Engine::default(),
+            cloud_transcription_model: DEFAULT_CLOUD_TRANSCRIPTION_MODEL.to_string(),
             local_model: DEFAULT_LOCAL_MODEL.to_string(),
         }
     }
@@ -166,10 +171,23 @@ pub fn set_local_model(
 }
 
 #[tauri::command]
+pub fn list_cloud_models() -> catalog::CloudCatalog {
+    catalog::cloud_catalog()
+}
+
+#[tauri::command]
 pub fn set_cleanup_model(state: State<AppState>, model: String) -> Result<Settings, String> {
-    let model = model.trim().to_string();
-    let model = if model.is_empty() { DEFAULT_CLEANUP_MODEL.to_string() } else { model };
+    let model = catalog::normalize_model_id(&model, DEFAULT_CLEANUP_MODEL)?;
     state.update(|s| s.cleanup_model = model)
+}
+
+#[tauri::command]
+pub fn set_cloud_transcription_model(
+    state: State<AppState>,
+    model: String,
+) -> Result<Settings, String> {
+    let model = catalog::normalize_model_id(&model, DEFAULT_CLOUD_TRANSCRIPTION_MODEL)?;
+    state.update(|s| s.cloud_transcription_model = model)
 }
 
 /// Switch the global hotkey. On failure the old shortcut stays registered.

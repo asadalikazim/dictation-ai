@@ -8,7 +8,6 @@ use serde_json::json;
 
 use crate::openrouter;
 
-const MODEL: &str = "openai/whisper-1";
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Deserialize)]
@@ -27,9 +26,10 @@ pub struct Transcription {
     pub cost_usd: f64,
 }
 
-pub async fn transcribe(wav: &[u8]) -> Result<Transcription, String> {
+pub async fn transcribe(wav: &[u8], model: &str) -> Result<Transcription, String> {
     let body = json!({
-        "model": MODEL,
+        "model": model,
+        "provider": { "data_collection": "deny" },
         "input_audio": {
             "data": base64::engine::general_purpose::STANDARD.encode(wav),
             "format": "wav",
