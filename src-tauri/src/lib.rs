@@ -233,27 +233,47 @@ fn open_window(
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.set_focus();
-        return;
+        return Some(window);
     }
-    let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
-        .title("Dictation AI Settings")
-        .inner_size(480.0, 680.0)
+    match WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into()))
+        .title(title)
+        .inner_size(size.0, size.1)
         .resizable(false)
-        .build();
-    match built {
+        .build()
+    {
         Ok(window) => {
-            // The window may close while a new hotkey is being recorded and the
-            // hotkey is paused; make sure it is registered again.
-            let handle = app.clone();
-            window.on_window_event(move |event| {
-                if let WindowEvent::Destroyed = event {
-                    settings::register_current(&handle, &handle.state::<AppState>());
-                }
-            });
             let _ = window.set_focus();
+            Some(window)
         }
-        Err(e) => log::error!("could not open settings: {e}"),
+        Err(e) => {
+            log::error!("could not open the {label} window: {e}");
+            None
+        }
     }
+}
+
+fn open_settings(app: &AppHandle) {
+    let Some(window) = open_window(
+        app,
+        "settings",
+        "index.html",
+        "Dictation AI Settings",
+        (480.0, 600.0),
+    ) else {
+        return;
+    };
+    // The window may close while a new hotkey is being recorded and the
+    // hotkey is paused; make sure it is registered again.
+    let handle = app.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::Destroyed = event {
+            settings::register_current(&handle, &handle.state::<AppState>());
+        }
+    });
+}
+
+fn open_usage(app: &AppHandle) {
+    open_window(app, "usage", "usage.html", "Dictation AI Usage", (440.0, 400.0));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -313,12 +333,13 @@ pub fn run() {
             let usage = UsageStore::load(app.path().app_data_dir()?.join("usage.json"));
             app.manage(AppState::new(loaded, shortcut.clone(), settings_path, usage));
 
+            let usage_item = MenuItem::with_id(app, "usage", "Usage…", true, None::<&str>)?;
             let settings_item =
                 MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let logs_item =
                 MenuItem::with_id(app, "logs", "Show Logs in Finder", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Dictation AI", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&settings_item, &logs_item, &quit])?;
+            let menu = Menu::with_items(app, &[&usage_item, &settings_item, &logs_item, &quit])?;
 
             TrayIconBuilder::with_id(status::TRAY_ID)
                 .icon(status::initial_icon())
@@ -326,6 +347,7 @@ pub fn run() {
                 .menu(&menu)
                 .tooltip("Dictation AI")
                 .on_menu_event(move |app, event| match event.id().as_ref() {
+                    "usage" => open_usage(app),
                     "settings" => open_settings(app),
                     "logs" => {
                         if let Err(e) = std::process::Command::new("open").arg(&log_dir).spawn() {

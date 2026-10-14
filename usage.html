@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dictation AI Usage</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/usage.ts" defer></script>
+  </head>
+  <body>
+    <main>
+      <section class="usage" aria-label="Usage">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col"><span class="visually-hidden">Measure</span></th>
+              <th scope="col">Last 24 hours</th>
+              <th scope="col">All time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="group"><th scope="rowgroup" colspan="3">Transcription</th></tr>
+            <tr>
+              <th scope="row" class="sub">Audio</th>
+              <td id="usage-t-audio-24h">–</td>
+              <td id="usage-t-audio-all">–</td>
+            </tr>
+            <tr>
+              <th scope="row" class="sub">Words</th>
+              <td id="usage-t-words-24h">–</td>
+              <td id="usage-t-words-all">–</td>
+            </tr>
+            <tr>
+              <th scope="row" class="sub">Cost</th>
+              <td id="usage-t-cost-24h">–</td>
+              <td id="usage-t-cost-all">–</td>
+            </tr>
+            <tr class="group"><th scope="rowgroup" colspan="3">Clean-up</th></tr>
+            <tr>
+              <th scope="row" class="sub">Words</th>
+              <td id="usage-c-words-24h">–</td>
+              <td id="usage-c-words-all">–</td>
+            </tr>
+            <tr>
+              <th scope="row" class="sub">Cost</th>
+              <td id="usage-c-cost-24h">–</td>
+              <td id="usage-c-cost-all">–</td>
+            </tr>
+            <tr class="total">
+              <th scope="row">Total cost</th>
+              <td id="usage-total-24h">–</td>
+              <td id="usage-total-all">–</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

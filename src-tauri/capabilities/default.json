@@ -1,9 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the settings window",
+  "description": "Capability for the settings and usage windows",
   "windows": [
-    "settings"
+    "settings",
+    "usage"
   ],
   "permissions": [
     "core:default"
