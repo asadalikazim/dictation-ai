@@ -156,7 +156,10 @@ Consequences to keep in mind:
   in-app entry field (the keyring crate); the rest of the app is unchanged.
 
 3.7 Tray and app shell
-- Tauri tray icon API for the menu bar item. Menu: Settings..., Quit.
+- Tauri tray icon API for the menu bar item. Menu: Usage..., Settings...,
+  Show Logs in Finder, Quit. Usage and Settings are separate windows
+  (usage.html and index.html), each created on first use and rebuilt after
+  being closed. The frontend is a two-page Vite build.
 - Distinct icon/template-image states: idle, listening, processing, error.
 - Hide the Dock icon: set activation policy to Accessory in setup
   [VERIFY exact Tauri v2 call], and/or LSUIElement in Info.plist.
@@ -186,27 +189,41 @@ Consequences to keep in mind:
   newest lines survive rotation, reopening appends, timestamp math.
 
 3.9 Usage tally
-- Six numbers: audio seconds, words and cost, each for the last 24 hours
-  and for all time.
+- Split by pipeline stage, each for the last 24 hours and for all time:
+    Transcription   audio seconds, words, cost
+    Clean-up        words, cost
+    Total cost      transcription cost + clean-up cost
+  Clean-up has no audio figure because it never touches audio.
 - Definitions:
-    audio seconds  duration of audio sent for transcription
-    words          words in the final text delivered (cleaned text, or
-                   the raw transcript if clean-up fell back)
-    cost           USD from the `usage.cost` field in the OpenRouter
-                   responses, transcription + clean-up combined. A
-                   rejected clean-up (e.g. too long) is still counted
-                   because it was billed; failed requests are not.
+    audio seconds   duration of audio sent for transcription (counted for
+                    both cloud and local runs)
+    trans. words    words in the raw transcript
+    clean-up words  words in the cleaned output; 0 when clean-up failed
+                    and the raw transcript was pasted
+    cost            USD from the `usage.cost` field in each OpenRouter
+                    response. Local transcription costs 0. A clean-up that
+                    was rejected (e.g. too long) is still counted because
+                    it was billed; failed requests are not.
 - Storage: usage.json in the app data dir: running all-time totals plus a
   list of per-dictation events for the last 24 hours only. Older events
   are dropped on each write (their contribution already lives in the
   all-time totals). Writes go to a temp file then rename, so a crash
-  cannot corrupt the file. A missing or corrupt file starts a fresh tally.
+  cannot corrupt the file.
+- Format version 2 (the split). The earlier unsplit format cannot be
+  divided between stages, so a file in that format, or one that cannot be
+  read, is discarded and the tally restarts from zero. This happened once
+  by decision when the split was introduced; the earlier total was well
+  under a dollar.
 - Recorded after clean-up and before paste, so cost is counted even if the
   paste then fails. Discarded clips (too short, silent) cost nothing and
   are not counted.
-- Shown in a Usage table in the settings window (refreshed when the
-  window gains focus) via a get_usage command.
-- Tests cover the 24 hour window and pruning.
+- Shown in its own Usage window, opened from the menu bar icon, via a
+  get_usage command. The window refreshes when it gains focus and every
+  3 seconds while visible, so a dictation made with the window open shows
+  up without reopening it.
+- Tests cover: the stage split and total, the 24 hour window and pruning,
+  zero-cost local runs, reset of an old-format file, persistence across a
+  reload, and an unreadable file.
 
 3.10 Automatic retries
 - Every OpenRouter call (transcription and clean-up) goes through one
@@ -399,7 +416,7 @@ Each step should be demoable before moving on.
 10. Test pass: many apps, long and short clips, no network, bad key,
     unplugged mic, rapid key presses.
 11. Rolling file logs (3.8), replacing console prints.
-12. Usage tally (3.9) and the Usage table in settings.
+12. Usage tally (3.9), shown in its own window from the menu bar.
 13. Automatic retries for OpenRouter calls (3.10).
 14. Local transcription with bundled models, engine toggle and model
     picker in settings (3.11).

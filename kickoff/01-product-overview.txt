@@ -90,8 +90,9 @@ In scope (MVP):
 - Settings: hotkey, microphone, transcription engine and local model,
   clean-up model
 - Rolling log files, capped at 5 MB in total, for troubleshooting
-- Usage tally: seconds of audio, words, and cost, each for the last 24
-  hours and for all time, shown in the settings window
+- Usage tally, in its own Usage window opened from the menu bar icon, for
+  the last 24 hours and for all time, split by stage: transcription (audio
+  seconds, words, cost) and clean-up (words, cost), plus a total cost
 
 Out of scope (for now):
 - Local language models for the clean-up step (local speech recognition
