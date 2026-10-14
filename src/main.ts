@@ -7,15 +7,21 @@ type Settings = {
   input_device: string | null;
   cleanup_model: string;
   engine: Engine;
+  cloud_transcription_model: string;
   local_model: string;
 };
 
 type LocalModel = { id: string; label: string; size_mb: number };
+type ModelOption = { id: string; label: string };
+type CloudCatalog = { transcription: ModelOption[]; cleanup: ModelOption[] };
 
 const hotkeyButton = document.querySelector<HTMLButtonElement>("#hotkey")!;
 const hotkeyMessage = document.querySelector<HTMLElement>("#hotkey-message")!;
 const microphone = document.querySelector<HTMLSelectElement>("#microphone")!;
 const modelInput = document.querySelector<HTMLInputElement>("#model")!;
+const cleanupSelect = document.querySelector<HTMLSelectElement>("#cleanup-model")!;
+const cloudSelect = document.querySelector<HTMLSelectElement>("#cloud-model")!;
+const cloudOther = document.querySelector<HTMLInputElement>("#cloud-model-other")!;
 const hotkeyReset = document.querySelector<HTMLButtonElement>("#hotkey-reset")!;
 const microphoneReset = document.querySelector<HTMLButtonElement>("#microphone-reset")!;
 const modelReset = document.querySelector<HTMLButtonElement>("#model-reset")!;
@@ -34,13 +40,14 @@ let savedTimer: number | undefined;
 
 // ---- helpers -------------------------------------------------------------
 
-function flashSaved(): void {
-  savedNote.textContent = "Saved";
+function flashSaved(text = "Saved", isError = false): void {
+  savedNote.textContent = text;
+  savedNote.classList.toggle("error", isError);
   savedNote.style.opacity = "1";
   window.clearTimeout(savedTimer);
   savedTimer = window.setTimeout(() => {
     savedNote.style.opacity = "0";
-  }, 1500);
+  }, isError ? 4000 : 1500);
 }
 
 function setHotkeyMessage(text: string, isError = false): void {
@@ -74,7 +81,9 @@ function updateResetButtons(): void {
   microphoneReset.disabled = settings.input_device === defaults.input_device;
   modelReset.disabled = settings.cleanup_model === defaults.cleanup_model;
   transcriptionReset.disabled =
-    settings.engine === defaults.engine && settings.local_model === defaults.local_model;
+    settings.engine === defaults.engine &&
+    settings.local_model === defaults.local_model &&
+    settings.cloud_transcription_model === defaults.cloud_transcription_model;
 }
 
 // ---- hotkey recording ----------------------------------------------------
@@ -197,25 +206,95 @@ microphone.addEventListener("change", () => {
 });
 microphoneReset.addEventListener("click", () => void saveDevice(defaults.input_device));
 
-// ---- clean-up model ------------------------------------------------------
+// ---- model pickers -------------------------------------------------------
 
-async function saveModel(value: string): Promise<void> {
-  settings = await invoke<Settings>("set_cleanup_model", { model: value });
-  modelInput.value = settings.cleanup_model;
-  updateResetButtons();
-  flashSaved();
+const OTHER = "__other__";
+
+type Picker = { render: () => void };
+
+/**
+ * A drop-down of known model ids with an "Other…" entry that reveals a text
+ * field for any OpenRouter model id. A saved id that is not in the list is
+ * shown under "Other…" with its text filled in.
+ */
+function createModelPicker(opts: {
+  select: HTMLSelectElement;
+  input: HTMLInputElement;
+  options: ModelOption[];
+  current: () => string;
+  save: (id: string) => Promise<void>;
+}): Picker {
+  const { select, input, options, current, save } = opts;
+  const isKnown = (id: string): boolean => options.some((o) => o.id === id);
+
+  select.replaceChildren();
+  for (const o of [...options, { id: OTHER, label: "Other…" }]) {
+    const option = document.createElement("option");
+    option.value = o.id;
+    option.textContent = o.label;
+    select.append(option);
+  }
+
+  function render(): void {
+    const id = current();
+    const known = isKnown(id);
+    select.value = known ? id : OTHER;
+    input.hidden = known;
+    if (!known) input.value = id;
+  }
+
+  select.addEventListener("change", () => {
+    if (select.value === OTHER) {
+      input.hidden = false;
+      input.value = isKnown(current()) ? "" : current();
+      input.focus();
+      return;
+    }
+    void save(select.value);
+  });
+  input.addEventListener("change", () => {
+    const value = input.value.trim();
+    if (value) void save(value);
+    else render();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur();
+  });
+
+  return { render };
 }
 
-modelInput.addEventListener("change", () => void saveModel(modelInput.value));
-modelInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") modelInput.blur();
-});
-modelReset.addEventListener("click", () => void saveModel(defaults.cleanup_model));
+let cleanupPicker: Picker;
+let cloudPicker: Picker;
+
+async function saveCleanupModel(model: string): Promise<void> {
+  try {
+    settings = await invoke<Settings>("set_cleanup_model", { model });
+    flashSaved();
+  } catch (err) {
+    flashSaved(String(err), true);
+  }
+  cleanupPicker.render();
+  updateResetButtons();
+}
+
+async function saveCloudModel(model: string): Promise<void> {
+  try {
+    settings = await invoke<Settings>("set_cloud_transcription_model", { model });
+    flashSaved();
+  } catch (err) {
+    flashSaved(String(err), true);
+  }
+  cloudPicker.render();
+  updateResetButtons();
+}
+
+modelReset.addEventListener("click", () => void saveCleanupModel(defaults.cleanup_model));
 
 // ---- transcription engine ------------------------------------------------
 
 const ENGINE_HINTS: Record<Engine, string> = {
-  cloud: "OpenRouter's hosted Whisper. Audio is sent online; about $0.006 per minute.",
+  cloud: "Runs on OpenRouter. Your audio is sent online.",
   local: "Runs on this Mac. Free, and your audio never leaves it.",
 };
 
@@ -236,6 +315,9 @@ function renderEngine(): void {
   engineLocal.setAttribute("aria-checked", String(local));
   localModelSelect.hidden = !local;
   localModelSelect.value = settings.local_model;
+  cloudSelect.hidden = local;
+  if (local) cloudOther.hidden = true;
+  else cloudPicker.render();
   engineHint.textContent = ENGINE_HINTS[settings.engine];
   updateResetButtons();
 }
@@ -258,6 +340,9 @@ localModelSelect.addEventListener("change", async () => {
 
 transcriptionReset.addEventListener("click", async () => {
   await invoke<Settings>("set_engine", { engine: defaults.engine });
+  await invoke<Settings>("set_cloud_transcription_model", {
+    model: defaults.cloud_transcription_model,
+  });
   settings = await invoke<Settings>("set_local_model", { model: defaults.local_model });
   renderEngine();
   flashSaved();
@@ -269,7 +354,22 @@ async function init(): Promise<void> {
   defaults = await invoke<Settings>("get_defaults");
   settings = await invoke<Settings>("get_settings");
   renderHotkey();
-  modelInput.value = settings.cleanup_model;
+  const catalog = await invoke<CloudCatalog>("list_cloud_models");
+  cleanupPicker = createModelPicker({
+    select: cleanupSelect,
+    input: modelInput,
+    options: catalog.cleanup,
+    current: () => settings.cleanup_model,
+    save: saveCleanupModel,
+  });
+  cloudPicker = createModelPicker({
+    select: cloudSelect,
+    input: cloudOther,
+    options: catalog.transcription,
+    current: () => settings.cloud_transcription_model,
+    save: saveCloudModel,
+  });
+  cleanupPicker.render();
   await loadLocalModels();
   renderEngine();
   await loadDevices();
