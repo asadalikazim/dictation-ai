@@ -10,6 +10,7 @@ use std::time::Duration;
 use serde::Deserialize;
 
 const API_BASE: &str = "https://openrouter.ai/api/v1";
+const NO_KEY_MESSAGE: &str = "No OpenRouter API key is set. Add one in Settings.";
 /// Retries after the first attempt, so up to 6 attempts in total.
 const MAX_RETRIES: u32 = 5;
 /// Delay before the first retry; doubles each time (0.5, 1, 2, 4, 8 s).
@@ -63,10 +64,13 @@ async fn attempt(
     timeout: Duration,
 ) -> Result<Vec<u8>, Failure> {
     let transient = |message: String| Failure::Transient { message, retry_after: None };
+    let Some(key) = crate::apikey::current() else {
+        return Err(Failure::Permanent(NO_KEY_MESSAGE.to_string()));
+    };
 
     let response = client()
         .post(format!("{API_BASE}{path}"))
-        .bearer_auth(env!("OPENROUTER_API_KEY"))
+        .bearer_auth(key)
         .timeout(timeout)
         .json(body)
         .send()
@@ -97,6 +101,61 @@ async fn attempt(
         Err(Failure::Transient { message, retry_after })
     } else {
         Err(Failure::Permanent(message))
+    }
+}
+
+/// Outcome of asking OpenRouter about the saved key.
+#[derive(serde::Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum KeyCheck {
+    /// No key has been saved yet.
+    NoKey,
+    /// OpenRouter accepted the key. Amounts are USD; `limit_remaining` is
+    /// absent when the key has no spending limit.
+    Valid { usage: Option<f64>, limit_remaining: Option<f64> },
+    /// OpenRouter rejected the key.
+    Rejected,
+    /// The check itself failed, so nothing is known about the key.
+    Unreachable { message: String },
+}
+
+#[derive(Deserialize)]
+struct KeyInfoEnvelope {
+    data: KeyInfo,
+}
+
+#[derive(Deserialize)]
+struct KeyInfo {
+    usage: Option<f64>,
+    limit_remaining: Option<f64>,
+}
+
+/// A single, unretried request, since a person is waiting on the answer.
+pub async fn check_key() -> KeyCheck {
+    let Some(key) = crate::apikey::current() else {
+        return KeyCheck::NoKey;
+    };
+    let response = client()
+        .get(format!("{API_BASE}/key"))
+        .bearer_auth(key)
+        .timeout(Duration::from_secs(15))
+        .send()
+        .await;
+    let response = match response {
+        Ok(r) => r,
+        Err(e) => return KeyCheck::Unreachable { message: format!("network error: {e}") },
+    };
+    match response.status().as_u16() {
+        200 => match response.json::<KeyInfoEnvelope>().await {
+            Ok(info) => KeyCheck::Valid {
+                usage: info.data.usage,
+                limit_remaining: info.data.limit_remaining,
+            },
+            // Accepted, just not in the shape expected.
+            Err(_) => KeyCheck::Valid { usage: None, limit_remaining: None },
+        },
+        401 | 403 => KeyCheck::Rejected,
+        other => KeyCheck::Unreachable { message: format!("OpenRouter returned HTTP {other}") },
     }
 }
 

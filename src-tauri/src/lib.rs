@@ -1,3 +1,4 @@
+mod apikey;
 mod audio;
 mod catalog;
 mod cleanup;
@@ -265,7 +266,7 @@ fn open_settings(app: &AppHandle) {
         "settings",
         "index.html",
         "Dictation AI Settings",
-        (480.0, 680.0),
+        (480.0, 760.0),
     ) else {
         return;
     };
@@ -303,6 +304,10 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            apikey::get_api_key_status,
+            apikey::set_api_key,
+            apikey::clear_api_key,
+            apikey::check_api_key,
             settings::get_settings,
             settings::get_defaults,
             settings::get_usage,
@@ -324,6 +329,11 @@ pub fn run() {
             // Route whisper.cpp / GGML output through our logger.
             whisper_rs::install_logging_hooks();
             log::info!("starting Dictation AI {}", env!("CARGO_PKG_VERSION"));
+
+            apikey::load();
+            if apikey::current().is_none() {
+                log::warn!("no OpenRouter API key is saved; add one in Settings");
+            }
 
             // Menu bar only: no Dock icon, no app switcher entry.
             #[cfg(target_os = "macos")]
