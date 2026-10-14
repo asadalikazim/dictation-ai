@@ -6,6 +6,7 @@ type Settings = {
   hotkey: string;
   input_device: string | null;
   cleanup_model: string;
+  cleanup_enabled: boolean;
   engine: Engine;
   cloud_transcription_model: string;
   local_model: string;
@@ -27,6 +28,9 @@ const hotkeyMessage = document.querySelector<HTMLElement>("#hotkey-message")!;
 const microphone = document.querySelector<HTMLSelectElement>("#microphone")!;
 const modelInput = document.querySelector<HTMLInputElement>("#model")!;
 const cleanupSelect = document.querySelector<HTMLSelectElement>("#cleanup-model")!;
+const cleanupOn = document.querySelector<HTMLButtonElement>("#cleanup-on")!;
+const cleanupOff = document.querySelector<HTMLButtonElement>("#cleanup-off")!;
+const cleanupHint = document.querySelector<HTMLElement>("#cleanup-hint")!;
 const cloudSelect = document.querySelector<HTMLSelectElement>("#cloud-model")!;
 const cloudOther = document.querySelector<HTMLInputElement>("#cloud-model-other")!;
 const hotkeyReset = document.querySelector<HTMLButtonElement>("#hotkey-reset")!;
@@ -194,7 +198,9 @@ function renderHotkey(): void {
 function updateResetButtons(): void {
   hotkeyReset.disabled = settings.hotkey === defaults.hotkey;
   microphoneReset.disabled = settings.input_device === defaults.input_device;
-  modelReset.disabled = settings.cleanup_model === defaults.cleanup_model;
+  modelReset.disabled =
+    settings.cleanup_model === defaults.cleanup_model &&
+    settings.cleanup_enabled === defaults.cleanup_enabled;
   transcriptionReset.disabled =
     settings.engine === defaults.engine &&
     settings.local_model === defaults.local_model &&
@@ -404,7 +410,38 @@ async function saveCloudModel(model: string): Promise<void> {
   updateResetButtons();
 }
 
-modelReset.addEventListener("click", () => void saveCleanupModel(defaults.cleanup_model));
+const CLEANUP_HINTS = {
+  on: "Tidies the transcript: removes fillers, fixes punctuation.",
+  off: "Off: the raw transcript is pasted exactly as transcribed.",
+};
+
+/** Show the model controls only while clean-up is on. */
+function renderCleanup(): void {
+  const on = settings.cleanup_enabled;
+  cleanupOn.setAttribute("aria-checked", String(on));
+  cleanupOff.setAttribute("aria-checked", String(!on));
+  cleanupHint.textContent = on ? CLEANUP_HINTS.on : CLEANUP_HINTS.off;
+  cleanupSelect.hidden = !on;
+  if (on) cleanupPicker.render();
+  else modelInput.hidden = true;
+  updateResetButtons();
+}
+
+async function chooseCleanup(enabled: boolean): Promise<void> {
+  if (settings.cleanup_enabled === enabled) return;
+  settings = await invoke<Settings>("set_cleanup_enabled", { enabled });
+  renderCleanup();
+  flashSaved();
+}
+
+cleanupOn.addEventListener("click", () => void chooseCleanup(true));
+cleanupOff.addEventListener("click", () => void chooseCleanup(false));
+
+modelReset.addEventListener("click", async () => {
+  await invoke<Settings>("set_cleanup_enabled", { enabled: defaults.cleanup_enabled });
+  await saveCleanupModel(defaults.cleanup_model);
+  renderCleanup();
+});
 
 // ---- transcription engine ------------------------------------------------
 
@@ -485,7 +522,7 @@ async function init(): Promise<void> {
     current: () => settings.cloud_transcription_model,
     save: saveCloudModel,
   });
-  cleanupPicker.render();
+  renderCleanup();
   await loadLocalModels();
   renderEngine();
   await loadDevices();

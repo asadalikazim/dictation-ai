@@ -75,9 +75,13 @@
       <section class="row">
         <div class="label">
           <label for="cleanup-model">Clean-up</label>
-          <p class="hint">Tidies the transcript: removes fillers, fixes punctuation.</p>
+          <p id="cleanup-hint" class="hint"></p>
         </div>
         <div class="control">
+          <div class="segmented" role="radiogroup" aria-label="Clean-up">
+            <button id="cleanup-on" type="button" role="radio" aria-checked="true">On</button>
+            <button id="cleanup-off" type="button" role="radio" aria-checked="false">Off</button>
+          </div>
           <select id="cleanup-model"></select>
           <input id="model" type="text" spellcheck="false" autocomplete="off"
                  placeholder="vendor/model-id" aria-label="Clean-up model ID" hidden />
