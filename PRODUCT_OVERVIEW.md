@@ -82,9 +82,9 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Hold-to-talk hotkey, configurable
 - Microphone selection
 - Speech-to-text in the cloud (OpenRouter Whisper) or locally (whisper.cpp, three bundled models), chosen in settings, with no fallback between them
-- Language-model clean-up pass with a fixed system prompt, which can be switched off
+- Language-model clean-up pass with a fixed system prompt and worked examples, which formats lists, paragraphs and emails, and which can be switched off
 - Paste the result at the cursor on hotkey release
-- Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, transcription engine, cloud and local transcription models, clean-up model
+- Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, launch at login, transcription engine, cloud and local transcription models, clean-up switch and model
 - Automatic retries of transient OpenRouter failures
 - Launch at login, using macOS Login Items
 - Rolling log files, capped at 5 MB in total, for troubleshooting
@@ -92,7 +92,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 
 ### Out of scope (for now)
 
-- Local language models for the clean-up step (local speech recognition is in scope; local clean-up is a possible later experiment)
+- Local language models for the clean-up step. Local speech recognition is in scope. A local clean-up model was evaluated and set aside: the ones small enough to run comfortably tend to obey dictated instructions, and the ones that behaved need 7 to 16 GB of RAM for essentially no saving (see the technical breakdown)
 - Downloading models inside the app (they ship bundled)
 - Fallback between cloud and local transcription
 - Voice commands ("make this shorter", "delete that")
@@ -123,5 +123,5 @@ You can use it all day as your default way to enter text in any app, and it rare
 - In cloud mode, two network round trips (transcribe, then clean up) sit between key release and paste, so latency is the main thing to watch. Local mode removes one of them.
 - Audio (cloud mode) and text leave the machine. This is accepted in exchange for a much simpler app.
 - The OpenRouter key sits in your login Keychain, so macOS may ask for permission to use it, especially after rebuilding a development build.
-- The app needs two system permissions (microphone and accessibility) that the user must grant manually.
+- The app needs two system permissions (microphone and accessibility) that the user must grant manually, and the built app is signed ad hoc and not notarised, so macOS may ask again after a rebuild.
 - The built app requires macOS 15 or later.
