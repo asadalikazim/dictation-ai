@@ -43,13 +43,19 @@ There is a single secret, the OpenRouter API key. You enter it in Settings and i
 
 The three local models ship inside the app, so switching to local mode needs no download. They are fetched once when the app is built, not stored in git.
 
+## Offline mode
+
+With transcription set to **On this Mac** and clean-up set to **Off**, the app needs no internet connection and no OpenRouter key. Your speech is transcribed locally and the raw transcript is pasted immediately; nothing leaves the machine. The raw transcript keeps its filler words and has Whisper's own punctuation, which is the trade for working fully offline.
+
+Leaving clean-up on with no key saved behaves the same way, because clean-up fails immediately and the raw transcript is pasted. With a key saved and no network, clean-up retries for about 15 seconds first, which is why the explicit switch exists.
+
 ## What you can configure (in the app)
 
 - Your OpenRouter API key, which can be checked against OpenRouter from the same screen
 - The hotkey that triggers dictation
 - Which microphone is used
 - Whether transcription runs in the cloud or on this Mac, which cloud model does it, and which of the three bundled models to use when it runs locally
-- Which language model does the clean-up
+- Whether the clean-up step runs at all, and which language model does it
 
 The cloud transcription model and the clean-up model are each chosen from a short list, or entered as any OpenRouter model id.
 
@@ -70,7 +76,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Hold-to-talk hotkey, configurable
 - Microphone selection
 - Speech-to-text in the cloud (OpenRouter Whisper) or locally (whisper.cpp, three bundled models), chosen in settings, with no fallback between them
-- Language-model clean-up pass with a fixed system prompt
+- Language-model clean-up pass with a fixed system prompt, which can be switched off
 - Paste the result at the cursor on hotkey release
 - Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, transcription engine, cloud and local transcription models, clean-up model
 - Automatic retries of transient OpenRouter failures
@@ -106,7 +112,7 @@ You can use it all day as your default way to enter text in any app, and it rare
 
 ## Known trade-offs
 
-- Cloud transcription and the clean-up step need an internet connection. Local transcription works offline, but clean-up then fails and the raw transcript is pasted instead, after the retries run out (about 15 seconds).
+- Cloud transcription and the clean-up step need an internet connection. Local transcription works offline: with clean-up switched off, or no key saved, the raw transcript is pasted immediately. With clean-up on, a key saved and no network, it waits about 15 seconds for the retries to run out first.
 - The bundled models make the built app about 1.2 GB.
 - In cloud mode, two network round trips (transcribe, then clean up) sit between key release and paste, so latency is the main thing to watch. Local mode removes one of them.
 - Audio (cloud mode) and text leave the machine. This is accepted in exchange for a much simpler app.
