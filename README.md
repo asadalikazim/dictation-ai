@@ -16,7 +16,7 @@ Hold a hotkey, speak, let go, and clean, ready-to-use text appears wherever your
 ```
 
 - **Transcription** runs either in the cloud (OpenAI Whisper through [OpenRouter](https://openrouter.ai), the default) or locally on your Mac with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) using one of three bundled models. You pick in Settings; there is no automatic fallback between them.
-- **Clean-up** sends the transcript to a language model that removes filler words, applies self-corrections ("Tuesday, no, Wednesday"), and adds punctuation, without changing what you meant.
+- **Clean-up** sends the transcript to a language model that removes filler words, applies self-corrections ("Tuesday, no, Wednesday"), adds punctuation, and lays out lists, paragraphs and emails, without changing what you meant. It tidies dictated instructions; it never obeys them.
 - **Paste** puts the result on the clipboard, sends Cmd+V, and restores whatever was on your clipboard before.
 
 If clean-up fails, you still get the raw transcript. Temporary OpenRouter failures are retried automatically.
@@ -48,7 +48,7 @@ Leaving clean-up **On** with no key saved behaves the same way, because clean-up
 | Node.js and npm | a current version; developed with Node 24 |
 | cmake | `brew install cmake`, needed to compile whisper.cpp |
 | An [OpenRouter](https://openrouter.ai) API key with credit | Needed for clean-up and for cloud transcription. You paste it into Settings after the first launch and it is stored in the macOS Keychain. OpenRouter required at least $0.50 of balance for audio requests when this was tested. |
-| About 15 GB of free disk space | 1.2 GB of models, plus build output: a development build is about 8.5 GB and a release build adds about 3.5 GB. |
+| About 15 GB of free disk space | 1.2 GB of models, plus build output: a development build is about 10 GB and a release build adds about 3.6 GB. `src-tauri/target` is safe to delete. |
 
 ## Setup
 
@@ -97,6 +97,15 @@ macOS will ask for two permissions, and the app needs both:
 macOS may also ask whether the app can use the Keychain item that holds your key. Choose **Always Allow**. Development builds are re-signed on every rebuild, so you may be asked again after rebuilding.
 
 When running with `npm run tauri dev`, these attach to your terminal app rather than to Dictation AI. The built `.app` gets its own entries.
+
+## Tests
+
+```bash
+cd src-tauri
+cargo test
+```
+
+Two more tests are ignored by default: `keychain_round_trip` (uses a throwaway item in your real Keychain) and `bench_models` (times the local models; needs `BENCH_WAVS`).
 
 ## Using it
 
