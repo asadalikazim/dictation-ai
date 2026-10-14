@@ -1,6 +1,7 @@
 mod audio;
 mod cleanup;
 mod logger;
+mod openrouter;
 mod paste;
 mod settings;
 mod status;
