@@ -3,6 +3,7 @@ name = "dictation-ai"
 version = "0.1.0"
 description = "Hold-to-talk dictation for macOS"
 authors = ["asadalikazim"]
+license = "MIT"
 edition = "2024"
 
 [lib]
