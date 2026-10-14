@@ -47,8 +47,10 @@ The three local models ship inside the app, so switching to local mode needs no 
 
 - The hotkey that triggers dictation
 - Which microphone is used
-- Whether transcription runs in the cloud or on this Mac, and which of the three bundled models to use when it runs locally
+- Whether transcription runs in the cloud or on this Mac, which cloud model does it, and which of the three bundled models to use when it runs locally
 - Which language model does the clean-up
+
+The cloud transcription model and the clean-up model are each chosen from a short list, or entered as any OpenRouter model id.
 
 ## Principles
 
@@ -69,7 +71,7 @@ The three local models ship inside the app, so switching to local mode needs no 
 - Speech-to-text in the cloud (OpenRouter Whisper) or locally (whisper.cpp, three bundled models), chosen in settings, with no fallback between them
 - Language-model clean-up pass with a fixed system prompt
 - Paste the result at the cursor on hotkey release
-- Settings: hotkey, microphone, transcription engine and local model, clean-up model
+- Settings: hotkey, microphone, transcription engine, cloud and local transcription models, clean-up model
 - Automatic retries of transient OpenRouter failures
 - Rolling log files, capped at 5 MB in total, for troubleshooting
 - Usage tally, in its own Usage window opened from the menu bar icon, for the last 24 hours and for all time, split by stage: transcription (audio seconds, words, cost) and clean-up (words, cost), plus a total cost

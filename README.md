@@ -24,7 +24,7 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 ## Features
 
 - Menu bar app: no Dock icon, no main window, with a status icon for idle, listening, processing and error
-- Configurable hotkey, microphone, transcription engine (cloud or local model) and clean-up model
+- Configurable hotkey, microphone and transcription engine (cloud or a local model). The cloud transcription model and the clean-up model are picked from short lists, or set to any [OpenRouter](https://openrouter.ai/models) model ID.
 - A Usage window: audio seconds, words and cost for the last 24 hours and all time, split by transcription and clean-up
 - Size-capped rolling log files (5 MB total) that never contain what you said
 
