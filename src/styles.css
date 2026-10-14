@@ -158,17 +158,6 @@ code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.usage {
-  margin-top: 8px;
-  padding-top: 16px;
-}
-
-.usage h2 {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
 table {
   width: 100%;
   border-collapse: collapse;
@@ -231,4 +220,26 @@ thead th {
 
 select[hidden] {
   display: none;
+}
+
+tr.group th {
+  padding-top: 12px;
+  color: var(--fg);
+  font-weight: 600;
+  text-align: left;
+}
+
+tbody th.sub {
+  padding-left: 12px;
+}
+
+tr.total th,
+tr.total td {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-weight: 600;
+}
+
+tr.total th {
+  color: var(--fg);
 }
