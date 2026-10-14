@@ -4,6 +4,7 @@ mod catalog;
 mod cleanup;
 mod local;
 mod logger;
+mod login_item;
 mod openrouter;
 mod paste;
 mod settings;
@@ -274,7 +275,7 @@ fn open_settings(app: &AppHandle) {
         "settings",
         "index.html",
         "Dictation AI Settings",
-        (480.0, 790.0),
+        (480.0, 850.0),
     ) else {
         return;
     };
@@ -312,6 +313,9 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            login_item::get_login_item,
+            login_item::set_login_item,
+            login_item::open_login_items_settings,
             apikey::get_api_key_status,
             apikey::set_api_key,
             apikey::clear_api_key,
@@ -396,7 +400,14 @@ pub fn run() {
                 local::preload(app.handle(), &model);
             }
 
-            app.global_shortcut().register(shortcut)?;
+            // A taken hotkey (another app, or a second copy of this one) must not
+            // stop the app starting: the menu and Settings still work, and the
+            // hotkey can be changed there.
+            if let Err(e) = app.global_shortcut().register(shortcut) {
+                log::error!("could not register the hotkey {hotkey_label}: {e}");
+                flash_error(app.handle());
+            }
+            log::info!("launch at login: {:?}", login_item::state());
             log::info!("ready; hold {hotkey_label}, speak, release");
             Ok(())
         })
