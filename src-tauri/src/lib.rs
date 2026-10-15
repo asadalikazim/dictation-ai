@@ -21,7 +21,7 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use settings::{AppState, Engine, Settings};
+use settings::{AppState, CleanupMode, Engine, Settings};
 use last_dictation::{LastDictationStore, Transcribed};
 use status::Status;
 use usage::{Totals, UsageStore};
@@ -69,7 +69,7 @@ fn on_key_up(app: &AppHandle) {
         let s = state.settings.lock().unwrap();
         Job {
             model: s.cleanup_model.clone(),
-            cleanup_enabled: s.cleanup_enabled,
+            cleanup_mode: s.cleanup_mode,
             engine: s.engine,
             cloud_model: s.cloud_transcription_model.clone(),
             local_model: s.local_model.clone(),
@@ -111,8 +111,8 @@ fn flash_error(app: &AppHandle) {
 struct Job {
     /// Clean-up model.
     model: String,
-    /// Whether the clean-up step runs at all.
-    cleanup_enabled: bool,
+    /// How hard clean-up works on the transcript, or whether it runs at all.
+    cleanup_mode: CleanupMode,
     engine: Engine,
     /// OpenRouter transcription model, used when the engine is Cloud.
     cloud_model: String,
@@ -129,7 +129,8 @@ async fn process(
     job: Job,
     released_at: Instant,
 ) -> Outcome {
-    let Job { model, cleanup_enabled, engine, cloud_model, local_model } = job;
+    let Job { model, cleanup_mode, engine, cloud_model, local_model } = job;
+    let cleanup_enabled = cleanup_mode != CleanupMode::Off;
     let secs = recording.duration_secs();
     log::info!(
         "captured {secs:.2}s of audio (peak {:.3}, rms {:.4})",
@@ -206,17 +207,18 @@ async fn process(
         model: &transcription_model,
         cost_usd: transcription.cost_usd,
         text: &transcription.text,
+        cleanup_mode,
         cleanup_model: cleanup_enabled.then_some(model.as_str()),
     });
 
     let (final_text, cleanup_words, cleanup_cost) = if cleanup_enabled {
         let cleanup_started = Instant::now();
-        let (cleaned, cleanup_cost) = cleanup::clean(&transcription.text, &model).await;
+        let (cleaned, cleanup_cost) = cleanup::clean(&transcription.text, &model, cleanup_mode).await;
         let cleanup_ms = cleanup_started.elapsed().as_millis() as u64;
         match cleaned {
             Ok(text) => {
                 log::info!(
-                    "cleaned up with {model} at {} ms (cost ${cleanup_cost:.5})",
+                    "cleaned up ({cleanup_mode:?}) with {model} at {} ms (cost ${cleanup_cost:.5})",
                     released_at.elapsed().as_millis()
                 );
                 log::debug!("cleaned: {text:?}");
@@ -366,7 +368,7 @@ pub fn run() {
             settings::set_local_model,
             settings::set_input_device,
             settings::set_cleanup_model,
-            settings::set_cleanup_enabled,
+            settings::set_cleanup_mode,
             settings::set_hotkey,
             settings::pause_hotkey,
             settings::resume_hotkey,

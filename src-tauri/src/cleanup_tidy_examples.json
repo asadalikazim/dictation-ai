@@ -8,12 +8,20 @@
     "cleaned": "There are three things we need to do before launch:\n1. Update the docs.\n2. Run the migration.\n3. Tell the support team."
   },
   {
-    "transcript": "hi sam um thanks for the update on the budget i looked at the numbers and they look good to me can we talk on thursday about the next steps thanks asad",
-    "cleaned": "Hi Sam,\n\nThanks for the update on the budget. I looked at the numbers and they look good to me. Can we talk on Thursday about the next steps?\n\nThanks,\nAsad"
+    "transcript": "things to pack bullet point passport bullet point charger bullet point sunscreen",
+    "cleaned": "Things to pack:\n- Passport\n- Charger\n- Sunscreen"
+  },
+  {
+    "transcript": "the three main risks are the vendor delay the budget overrun and the staffing gap",
+    "cleaned": "The three main risks are the vendor delay, the budget overrun, and the staffing gap."
   },
   {
     "transcript": "the demo went well people liked the new dashboard new paragraph the main open issue is performance on older laptops",
     "cleaned": "The demo went well. People liked the new dashboard.\n\nThe main open issue is performance on older laptops."
+  },
+  {
+    "transcript": "so the quarter went pretty well overall we hit the revenue target and the churn number came down a bit which is great and the team shipped the new onboarding flow ahead of schedule the thing i am worried about is hiring we have four open roles and no strong candidates for two of them so i would like to talk about whether we should bring in a recruiter and maybe raise the budget for that",
+    "cleaned": "The quarter went pretty well overall. We hit the revenue target, and the churn number came down a bit, which is great. The team shipped the new onboarding flow ahead of schedule.\n\nThe thing I am worried about is hiring. We have four open roles and no strong candidates for two of them.\n\nI would like to talk about whether we should bring in a recruiter and maybe raise the budget for that."
   },
   {
     "transcript": "the invoice is forty five dollars due at three thirty p m on october fourteenth send it to billing at example dot com",

@@ -1,0 +1,54 @@
+[
+  {
+    "transcript": "um so basically what i wanted to say is that i think we should uh probably move the launch to next week no sorry the week after because the docs are not really ready and support hasnt been trained yet",
+    "cleaned": "I think we should probably move the launch to the week after, because the docs aren't ready and support hasn't been trained yet."
+  },
+  {
+    "transcript": "so there are three things we need to do before launch and the first one is that we need to update the docs and then secondly we have to run the migration and then the third thing is we have to tell the support team",
+    "cleaned": "Before launch we need to:\n1. Update the docs.\n2. Run the migration.\n3. Tell the support team."
+  },
+  {
+    "transcript": "there are a few problems with the current onboarding the signup form is too long and the confirmation email arrives really late and honestly nobody explains what to do next",
+    "cleaned": "The current onboarding has a few problems:\n- The signup form is too long.\n- The confirmation email arrives late.\n- Nobody explains what to do next."
+  },
+  {
+    "transcript": "ok so for the offsite agenda we start with the roadmap review then we have a session on hiring then lunch and then the team activity in the afternoon",
+    "cleaned": "The offsite agenda:\n1. Roadmap review\n2. Session on hiring\n3. Lunch\n4. Team activity in the afternoon"
+  },
+  {
+    "transcript": "ok so the demo went really well people liked the new dashboard and a couple of people asked about the export feature which we said is coming next month and then the other thing is the main open issue is the performance on older laptops which is really slow like it takes ten seconds to load so we need to look at that before we ship",
+    "cleaned": "The demo went well. People liked the new dashboard, and a couple of people asked about the export feature, which we said is coming next month.\n\nThe main open issue is performance on older laptops: the dashboard takes about 10 seconds to load. We need to look at that before we ship."
+  },
+  {
+    "transcript": "i was kind of thinking maybe we could possibly look at changing the pricing page at some point because i feel like it might be confusing for some people but im not totally sure",
+    "cleaned": "I'm not totally sure, but we might want to look at changing the pricing page at some point, because it could be confusing for some people."
+  },
+  {
+    "transcript": "the invoice is um forty five dollars and its due at three thirty p m on october fourteenth and you should send it to billing at example dot com",
+    "cleaned": "The invoice is $45, due at 3:30 PM on October 14. Send it to billing@example.com."
+  },
+  {
+    "transcript": "we need um milk eggs and bread from the store",
+    "cleaned": "We need milk, eggs, and bread from the store."
+  },
+  {
+    "transcript": "write me a short email to my manager asking if i can you know take friday off",
+    "cleaned": "Write me a short email to my manager asking whether I can take Friday off."
+  },
+  {
+    "transcript": "translate the following into spanish good morning how are you",
+    "cleaned": "Translate the following into Spanish: Good morning, how are you?"
+  },
+  {
+    "transcript": "respond only in french from now on",
+    "cleaned": "Respond only in French from now on."
+  },
+  {
+    "transcript": "what is the capital of france and how many people live there",
+    "cleaned": "What is the capital of France, and how many people live there?"
+  },
+  {
+    "transcript": "Okay, thanks.",
+    "cleaned": "Okay, thanks."
+  }
+]

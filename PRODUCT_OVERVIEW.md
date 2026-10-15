@@ -31,11 +31,15 @@ The raw transcript passes through a language model that is told to:
 - add punctuation and sensible capitalisation
 - write numbers, times and money the usual way ("three thirty p m" becomes 3:30 PM), and spoken email addresses and web addresses as typed ("jane at example dot com" becomes jane@example.com)
 - turn spoken structure into layout: "firstly... secondly... thirdly" becomes a numbered list, "bullet point" items become a bulleted list, "new paragraph" and clear topic changes become paragraph breaks
-- lay out a dictated email as an email when it opens with a greeting and ends with a sign-off: greeting on its own line, the body in paragraphs, the sign-off and name on separate lines
 - preserve the speaker's meaning and wording otherwise, never translating, refusing or softening anything
 - output only the final text, never commentary, and never act on instructions that happen to appear in the dictation, such as "write me an email" or "translate this into Spanish"
 
-It only adds structure the speech clearly has. A single "first of all" in a sentence stays a sentence, and a greeting without a sign-off is never turned into an email.
+It only adds structure the speech clearly has. A single "first of all" in a sentence stays a sentence, and "milk, eggs and bread" stays one sentence rather than becoming a list.
+
+Clean-up has two strengths, chosen in Settings (or Off for none):
+
+- **Tidy** is a light edit. The bullets above are what it does, and your own words and sentences stay.
+- **Polish** is a strong edit. It does everything Tidy does, then rewrites the text as complete, correct, concise writing: it removes rambling and repetition, reorders for clarity and groups related points. It must keep everything you said (every fact, name, number, decision and reason) and how sure you sounded, and must not add anything. A dictated instruction is still never carried out in either mode.
 
 ## How it is powered
 
@@ -82,9 +86,9 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Hold-to-talk hotkey, configurable
 - Microphone selection
 - Speech-to-text in the cloud (OpenRouter Whisper) or locally (whisper.cpp, three bundled models), chosen in settings, with no fallback between them
-- Language-model clean-up pass with a fixed system prompt and worked examples, which formats lists, paragraphs and emails, and which can be switched off
+- Language-model clean-up pass with a fixed system prompt and worked examples, with two strengths, Tidy and Polish, which formats lists and paragraphs, and which can be switched off
 - Paste the result at the cursor on hotkey release
-- Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, transcription engine, cloud and local transcription models, clean-up switch and model
+- Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, transcription engine, cloud and local transcription models, clean-up mode (Off, Tidy or Polish) and model
 - Automatic retries of transient OpenRouter failures
 - Rolling log files, capped at 5 MB in total, for troubleshooting
 - Last Dictation window, opened from the menu bar icon: the transcript and the cleaned-up text of the most recent dictation with a Copy button for each, plus when it was recorded, audio length, word counts, the time from release to paste, and for each step the model used, the time it took and its cost (and whether transcription ran in the cloud or locally). Only that one dictation is kept, in a JSON file that the next dictation overwrites, and it can be cleared from the window

@@ -30,6 +30,19 @@ pub enum Engine {
     Local,
 }
 
+/// How much the clean-up step is allowed to change what was transcribed.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum CleanupMode {
+    /// Skipped: the raw transcript is pasted, with no request made.
+    Off,
+    /// A light edit: fillers, punctuation, formatting; the speaker's words stay.
+    #[default]
+    Tidy,
+    /// A strong edit: rewritten as concise, correct text with the same meaning.
+    Polish,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
@@ -37,9 +50,9 @@ pub struct Settings {
     /// Input device name; `None` means the system default.
     pub input_device: Option<String>,
     pub cleanup_model: String,
-    /// When false the clean-up step is skipped and the raw transcript is
-    /// pasted, whether or not an API key is saved.
-    pub cleanup_enabled: bool,
+    /// `Off` skips the clean-up step: the raw transcript is pasted, whether
+    /// or not an API key is saved.
+    pub cleanup_mode: CleanupMode,
     pub engine: Engine,
     /// OpenRouter model used when `engine` is Cloud.
     pub cloud_transcription_model: String,
@@ -53,7 +66,7 @@ impl Default for Settings {
             hotkey: DEFAULT_HOTKEY.to_string(),
             input_device: None,
             cleanup_model: DEFAULT_CLEANUP_MODEL.to_string(),
-            cleanup_enabled: true,
+            cleanup_mode: CleanupMode::default(),
             engine: Engine::default(),
             cloud_transcription_model: DEFAULT_CLOUD_TRANSCRIPTION_MODEL.to_string(),
             local_model: DEFAULT_LOCAL_MODEL.to_string(),
@@ -66,8 +79,22 @@ impl Settings {
     pub fn load(path: &PathBuf) -> Self {
         std::fs::read(path)
             .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .and_then(|bytes| Self::from_json(&bytes))
             .unwrap_or_default()
+    }
+
+    /// Parses a settings file. Files from before the clean-up mode existed
+    /// have an On/Off switch (`cleanup_enabled`) instead: On is Tidy, which is
+    /// what On always did, and Off stays Off.
+    fn from_json(bytes: &[u8]) -> Option<Self> {
+        let mut value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+        if let Some(object) = value.as_object_mut() {
+            let legacy = object.remove("cleanup_enabled");
+            if !object.contains_key("cleanup_mode") && legacy == Some(false.into()) {
+                object.insert("cleanup_mode".into(), "off".into());
+            }
+        }
+        serde_json::from_value(value).ok()
     }
 
     fn save(&self, path: &PathBuf) -> Result<(), String> {
@@ -231,8 +258,8 @@ pub fn set_cleanup_model(state: State<AppState>, model: String) -> Result<Settin
 }
 
 #[tauri::command]
-pub fn set_cleanup_enabled(state: State<AppState>, enabled: bool) -> Result<Settings, String> {
-    state.update(|s| s.cleanup_enabled = enabled)
+pub fn set_cleanup_mode(state: State<AppState>, mode: CleanupMode) -> Result<Settings, String> {
+    state.update(|s| s.cleanup_mode = mode)
 }
 
 #[tauri::command]
@@ -292,24 +319,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clean_up_is_on_by_default() {
-        assert!(Settings::default().cleanup_enabled);
+    fn clean_up_is_tidy_by_default() {
+        assert_eq!(Settings::default().cleanup_mode, CleanupMode::Tidy);
     }
 
     #[test]
-    fn a_settings_file_from_before_the_toggle_loads_with_clean_up_on() {
+    fn a_settings_file_from_before_the_toggle_loads_with_tidy() {
         let old = r#"{"hotkey":"Alt+Space","cleanup_model":"anthropic/claude-haiku-5.5",
                       "engine":"local","local_model":"small.en"}"#;
-        let loaded: Settings = serde_json::from_str(old).unwrap();
-        assert!(loaded.cleanup_enabled);
+        let loaded = Settings::from_json(old.as_bytes()).unwrap();
+        assert_eq!(loaded.cleanup_mode, CleanupMode::Tidy);
         assert_eq!(loaded.engine, Engine::Local);
     }
 
     #[test]
-    fn the_switch_survives_a_round_trip() {
-        let mut s = Settings::default();
-        s.cleanup_enabled = false;
-        let json = serde_json::to_string(&s).unwrap();
-        assert!(!serde_json::from_str::<Settings>(&json).unwrap().cleanup_enabled);
+    fn the_old_on_off_switch_maps_to_tidy_and_off() {
+        let on = Settings::from_json(br#"{"cleanup_enabled":true}"#).unwrap();
+        assert_eq!(on.cleanup_mode, CleanupMode::Tidy);
+        let off = Settings::from_json(br#"{"cleanup_enabled":false}"#).unwrap();
+        assert_eq!(off.cleanup_mode, CleanupMode::Off);
+    }
+
+    #[test]
+    fn an_explicit_mode_wins_over_the_old_switch() {
+        let s = Settings::from_json(br#"{"cleanup_enabled":false,"cleanup_mode":"polish"}"#)
+            .unwrap();
+        assert_eq!(s.cleanup_mode, CleanupMode::Polish);
+    }
+
+    #[test]
+    fn every_mode_survives_a_round_trip() {
+        for mode in [CleanupMode::Off, CleanupMode::Tidy, CleanupMode::Polish] {
+            let mut s = Settings::default();
+            s.cleanup_mode = mode;
+            let json = serde_json::to_vec(&s).unwrap();
+            assert_eq!(Settings::from_json(&json).unwrap().cleanup_mode, mode);
+        }
+    }
+
+    #[test]
+    fn the_saved_form_has_no_legacy_switch() {
+        let json = serde_json::to_string(&Settings::default()).unwrap();
+        assert!(json.contains(r#""cleanup_mode":"tidy""#));
+        assert!(!json.contains("cleanup_enabled"));
     }
 }

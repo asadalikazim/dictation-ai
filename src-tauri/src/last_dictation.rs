@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::settings::Engine;
+use crate::settings::{CleanupMode, Engine};
 
 /// Where the clean-up step stands for the dictation.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -36,6 +36,7 @@ pub struct Transcribed<'a> {
     pub model: &'a str,
     pub cost_usd: f64,
     pub text: &'a str,
+    pub cleanup_mode: CleanupMode,
     /// The clean-up model, or `None` when clean-up is switched off.
     pub cleanup_model: Option<&'a str>,
 }
@@ -51,6 +52,9 @@ pub struct LastDictation {
     pub transcription_cost_usd: f64,
     pub transcript: String,
     pub cleanup: CleanupState,
+    /// The mode clean-up ran in. Absent in files from before modes existed.
+    #[serde(default)]
+    pub cleanup_mode: Option<CleanupMode>,
     /// `None` when clean-up was switched off.
     pub cleanup_model: Option<String>,
     /// `None` until clean-up has run.
@@ -107,6 +111,7 @@ impl LastDictationStore {
             transcription_cost_usd: t.cost_usd,
             transcript: t.text.to_string(),
             cleanup,
+            cleanup_mode: Some(t.cleanup_mode),
             cleanup_model: t.cleanup_model.map(str::to_string),
             cleanup_ms: None,
             cleanup_cost_usd: None,
@@ -193,6 +198,11 @@ mod tests {
             model: "large-v3-turbo-q5_0",
             cost_usd: 0.0,
             text,
+            cleanup_mode: if cleanup_model.is_some() {
+                CleanupMode::Polish
+            } else {
+                CleanupMode::Off
+            },
             cleanup_model,
         }
     }
@@ -219,6 +229,7 @@ mod tests {
         assert_eq!(early.transcription_engine, Engine::Local);
         assert_eq!(early.transcription_model, "large-v3-turbo-q5_0");
         assert_eq!(early.cleanup_model.as_deref(), Some("some/model"));
+        assert_eq!(early.cleanup_mode, Some(CleanupMode::Polish));
         assert!(early.cleanup_cost_usd.is_none() && early.total_ms.is_none());
         assert!(early.recorded_at > 0);
 
@@ -262,6 +273,24 @@ mod tests {
         assert!(last.cleaned.is_none());
         assert!(last.cleanup_ms.is_none() && last.cleanup_cost_usd.is_none());
         assert!(last.cleanup_model.is_none() && last.total_ms.is_none());
+        assert_eq!(last.cleanup_mode, Some(CleanupMode::Off));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_file_from_before_modes_existed_still_loads() {
+        let path = temp_path("no-mode");
+        std::fs::write(
+            &path,
+            r#"{"recorded_at":1,"audio_seconds":1.0,"transcription_ms":1,
+                "transcription_engine":"cloud","transcription_model":"m",
+                "transcription_cost_usd":0.0,"transcript":"hi","cleanup":"off",
+                "cleanup_model":null,"cleanup_ms":null,"cleanup_cost_usd":null,
+                "cleaned":null,"total_ms":null}"#,
+        )
+        .unwrap();
+        let last = LastDictationStore::load(path.clone()).snapshot().unwrap();
+        assert_eq!(last.cleanup_mode, None);
         let _ = std::fs::remove_file(&path);
     }
 

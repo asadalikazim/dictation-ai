@@ -10,6 +10,7 @@ type LastDictation = {
   transcription_cost_usd: number;
   transcript: string;
   cleanup: CleanupState;
+  cleanup_mode: "off" | "tidy" | "polish" | null;
   cleanup_model: string | null;
   cleanup_ms: number | null;
   cleanup_cost_usd: number | null;
@@ -66,6 +67,7 @@ function render(last: LastDictation | null): void {
   el("last-t-text").textContent = last.transcript;
 
   const cleanupRan = last.cleanup_ms !== null;
+  text("last-c-mode", last.cleanup_mode ? CLEANUP_MODES[last.cleanup_mode] : "–");
   text("last-c-model", last.cleanup_model ?? "–");
   text("last-c-words", cleaned !== null ? formatWords(wordCount(cleaned)) : "–");
   text(
@@ -87,6 +89,8 @@ function render(last: LastDictation | null): void {
 async function load(): Promise<void> {
   render(await invoke<LastDictation | null>("get_last_dictation"));
 }
+
+const CLEANUP_MODES = { off: "Off", tidy: "Tidy", polish: "Polish" } as const;
 
 let messageTimer: number | undefined;
 

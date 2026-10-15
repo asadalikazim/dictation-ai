@@ -16,7 +16,7 @@ Hold a hotkey, speak, let go, and clean, ready-to-use text appears wherever your
 ```
 
 - **Transcription** runs either in the cloud (OpenAI Whisper through [OpenRouter](https://openrouter.ai), the default) or locally on your Mac with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) using one of three bundled models. You pick in Settings; there is no automatic fallback between them.
-- **Clean-up** sends the transcript to a language model that removes filler words, applies self-corrections ("Tuesday, no, Wednesday"), adds punctuation, and lays out lists, paragraphs and emails, without changing what you meant. It tidies dictated instructions; it never obeys them.
+- **Clean-up** sends the transcript to a language model that removes filler words, applies self-corrections ("Tuesday, no, Wednesday"), adds punctuation, and lays out lists and paragraphs, without changing what you mean. Two strengths: **Tidy** keeps your own words, **Polish** rewrites the text to be clear and concise while keeping your meaningt. It tidies dictated instructions; it never obeys them.
 - **Paste** puts the result on the clipboard, sends Cmd+V, and restores whatever was on your clipboard before.
 
 If clean-up fails, you still get the raw transcript. Temporary OpenRouter failures are retried automatically.
@@ -28,15 +28,15 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 - Your OpenRouter key is entered in Settings and stored in the macOS Keychain, with a **Check key** button
 - A Usage window: audio seconds, words and cost for the last 24 hours, the last 30 days and all time (with how many days the tally has been running), split by transcription and clean-up
 - A Last Dictation window: the most recent transcript and cleaned-up text, each with a Copy button, plus the audio length, word counts, and for each step the model, how long it took and what it cost, including whether transcription ran in the cloud or locally. The text is kept in `last-dictation.json`, which the window can show in Finder or clear
-- Clean-up also lays out what you said: numbered lists from "firstly, secondly…", paragraph breaks, and emails with the greeting and sign-off on their own lines
-- Clean-up can be switched off; together with local transcription that gives a fully offline mode
+- Clean-up also lays out what you said: numbered and bulleted lists from "firstly, secondly…" and "bullet point", and paragraph breaks at topic changes
+- Three clean-up settings: **Off**, **Tidy** (light edit, your wording stays) and **Polish** (a strong rewrite into concise, correct text that keeps your meaning). Off together with local transcription gives a fully offline mode
 - Size-capped rolling log files (5 MB total) that never contain what you said. The only place your words are stored is `last-dictation.json`, which holds just the latest dictation and is overwritten by the next one
 
 ## Offline mode
 
 Set **Transcription** to **On this Mac** and **Clean-up** to **Off**, and dictation needs no internet connection and no OpenRouter key. Audio is transcribed on your Mac and the raw transcript is pasted immediately. Nothing leaves the machine.
 
-Leaving clean-up **On** with no key saved behaves the same way, because clean-up fails at once and the raw transcript is pasted. With a key saved and no network, clean-up retries for about 15 seconds before giving up, so switch it **Off** if you expect to be offline.
+Leaving clean-up on (**Tidy** or **Polish**) with no key saved behaves the same way, because clean-up fails at once and the raw transcript is pasted. With a key saved and no network, clean-up retries for about 15 seconds before giving up, so switch it **Off** if you expect to be offline.
 
 ## Prerequisites
 
@@ -106,13 +106,25 @@ cargo test
 
 Two more tests are ignored by default: `keychain_round_trip` (uses a throwaway item in your real Keychain) and `bench_models` (times the local models; needs `BENCH_WAVS`).
 
+### Clean-up prompt evaluation
+
+The Tidy and Polish prompts are scored against a real model with a case suite in `evals/cleanup/cases.json`:
+
+```bash
+npm run eval:cleanup                          # every case, both modes, Haiku 5.5
+npm run eval:cleanup -- --mode polish -v      # one mode, showing each output
+npm run eval:cleanup -- --filter trap --runs 5
+```
+
+It reads the same prompt and example files the app ships, and costs about three cents for one run of every case. The key comes from `OPENROUTER_API_KEY` or from the app's Keychain item (macOS may ask you to allow that). Run it after any change to the prompt files in `src-tauri/src/cleanup_*`. The checks are deterministic, so they catch regressions in formatting and in obeying dictated instructions; read a few Polish outputs with `-v` to judge the meaning by eye.
+
 ## Using it
 
 Click the menu bar icon for:
 
 - **Last Dictation…** to see, and copy, the text of your most recent dictation, with its timings and costs, show its file in Finder, or clear it
 - **Usage…** to see what you have processed and what it cost
-- **Settings…** to set your OpenRouter key and change the hotkey, microphone, transcription engine and model, and whether clean-up runs and with which model
+- **Settings…** to set your OpenRouter key and change the hotkey, microphone, transcription engine and model, and whether clean-up runs (Off, Tidy or Polish) and with which model
 - **Show Logs in Finder**
 - **Quit**
 
@@ -131,7 +143,7 @@ The development run and the built app share the same data, because they share a 
 
 - **Your key is in the Keychain, not in the app or the repo.** The built app contains no key. Consider a dedicated OpenRouter key with a spending limit.
 - **Audio and text leave your machine** in cloud mode, and text does in local mode (for clean-up). Review your OpenRouter privacy settings.
-- **Local transcription works offline.** With clean-up switched Off, or no key saved, the raw transcript is pasted immediately. With clean-up On, a key saved and no network, it retries for about 15 seconds first. See [Offline mode](#offline-mode).
+- **Local transcription works offline.** With clean-up switched Off, or no key saved, the raw transcript is pasted immediately. With clean-up on (Tidy or Polish), a key saved and no network, it retries for about 15 seconds first. See [Offline mode](#offline-mode).
 
 ## Troubleshooting
 
