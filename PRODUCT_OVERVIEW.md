@@ -84,9 +84,8 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Speech-to-text in the cloud (OpenRouter Whisper) or locally (whisper.cpp, three bundled models), chosen in settings, with no fallback between them
 - Language-model clean-up pass with a fixed system prompt and worked examples, which formats lists, paragraphs and emails, and which can be switched off
 - Paste the result at the cursor on hotkey release
-- Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, launch at login, transcription engine, cloud and local transcription models, clean-up switch and model
+- Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, transcription engine, cloud and local transcription models, clean-up switch and model
 - Automatic retries of transient OpenRouter failures
-- Launch at login, using macOS Login Items
 - Rolling log files, capped at 5 MB in total, for troubleshooting
 - Last Dictation window, opened from the menu bar icon: the transcript and the cleaned-up text of the most recent dictation with a Copy button for each, plus when it was recorded, audio length, word counts, the time from release to paste, and for each step the model used, the time it took and its cost (and whether transcription ran in the cloud or locally). Only that one dictation is kept, in a JSON file that the next dictation overwrites, and it can be cleared from the window
 - Usage tally, in its own Usage window opened from the menu bar icon, for the last 24 hours, the last 30 days and for all time (labelled with how many days the tally has been running), split by stage: transcription (audio seconds, words, cost) and clean-up (words, cost), plus a total cost

@@ -16,7 +16,6 @@ type LocalModel = { id: string; label: string; size_mb: number };
 type ModelOption = { id: string; label: string };
 
 type KeyStatus = { set: boolean; hint: string | null };
-type LoginState = "enabled" | "disabled" | "needs_approval" | "unavailable";
 type KeyCheck =
   | { status: "no_key" }
   | { status: "valid"; usage: number | null; limit_remaining: number | null }
@@ -157,53 +156,6 @@ async function loadKey(): Promise<void> {
     setKeyMessage("Add your key to enable clean-up and cloud transcription.");
   }
 }
-
-// ---- launch at login -----------------------------------------------------
-
-const loginOn = document.querySelector<HTMLButtonElement>("#login-on")!;
-const loginOff = document.querySelector<HTMLButtonElement>("#login-off")!;
-const loginMessage = document.querySelector<HTMLElement>("#login-message")!;
-const loginOpen = document.querySelector<HTMLButtonElement>("#login-open")!;
-
-/** macOS owns this setting, so it is read from the system, not from our file. */
-function renderLogin(state: LoginState): void {
-  const on = state === "enabled";
-  loginOn.setAttribute("aria-checked", String(on));
-  loginOff.setAttribute("aria-checked", String(!on));
-  loginOn.disabled = state === "unavailable";
-  loginOff.disabled = state === "unavailable";
-  loginOpen.hidden = state !== "needs_approval";
-  loginMessage.classList.toggle("error", false);
-  switch (state) {
-    case "needs_approval":
-      loginMessage.textContent =
-        "Waiting for your approval: switch Dictation AI on under System Settings > General > Login Items.";
-      break;
-    case "unavailable":
-      loginMessage.textContent = "Only available in the installed app, not in a development run.";
-      break;
-    default:
-      loginMessage.textContent = "";
-  }
-}
-
-async function chooseLogin(enabled: boolean): Promise<void> {
-  try {
-    renderLogin(await invoke<LoginState>("set_login_item", { enabled }));
-    flashSaved();
-  } catch (err) {
-    loginMessage.textContent = String(err);
-    loginMessage.classList.add("error");
-  }
-}
-
-async function loadLogin(): Promise<void> {
-  renderLogin(await invoke<LoginState>("get_login_item"));
-}
-
-loginOn.addEventListener("click", () => void chooseLogin(true));
-loginOff.addEventListener("click", () => void chooseLogin(false));
-loginOpen.addEventListener("click", () => void invoke("open_login_items_settings"));
 
 // ---- helpers -------------------------------------------------------------
 
@@ -555,7 +507,6 @@ async function init(): Promise<void> {
   settings = await invoke<Settings>("get_settings");
   renderHotkey();
   await loadKey();
-  await loadLogin();
   const catalog = await invoke<CloudCatalog>("list_cloud_models");
   cleanupPicker = createModelPicker({
     select: cleanupSelect,
@@ -578,8 +529,5 @@ async function init(): Promise<void> {
 }
 
 // Microphones come and go; refresh the list whenever the window is focused.
-window.addEventListener("focus", () => {
-  void loadDevices();
-  void loadLogin(); // it can be changed in System Settings meanwhile
-});
+window.addEventListener("focus", () => void loadDevices());
 void init();

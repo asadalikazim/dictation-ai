@@ -30,7 +30,6 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 - A Last Dictation window: the most recent transcript and cleaned-up text, each with a Copy button, plus the audio length, word counts, and for each step the model, how long it took and what it cost, including whether transcription ran in the cloud or locally. The text is kept in `last-dictation.json`, which the window can show in Finder or clear
 - Clean-up also lays out what you said: numbered lists from "firstly, secondly…", paragraph breaks, and emails with the greeting and sign-off on their own lines
 - Clean-up can be switched off; together with local transcription that gives a fully offline mode
-- Launch at login, through macOS Login Items
 - Size-capped rolling log files (5 MB total) that never contain what you said. The only place your words are stored is `last-dictation.json`, which holds just the latest dictation and is overwritten by the next one
 
 ## Offline mode
@@ -82,9 +81,8 @@ npm run tauri build -- --bundles app
 To use the built app day to day:
 
 1. **Quit `npm run tauri dev` first.** Both want the same hotkey and the same menu bar slot.
-2. Copy `Dictation AI.app` into `/Applications` (or anywhere stable); `ditto "src-tauri/target/release/bundle/macos/Dictation AI.app" "/Applications/Dictation AI.app"` does it, and keeps the signature intact. Launch at login follows the app's location, so don't leave it in the build folder.
+2. Copy `Dictation AI.app` into `/Applications` (or anywhere stable); `ditto "src-tauri/target/release/bundle/macos/Dictation AI.app" "/Applications/Dictation AI.app"` does it, and keeps the signature intact.
 3. Open it. macOS asks for the microphone, Accessibility and Keychain permissions again, because the built app is a different program from the development run.
-4. In **Settings…**, turn on **Launch at login** if you want it.
 
 The build is signed ad hoc and is not notarised, which is fine for your own Mac. Because an ad-hoc signature changes with every build, macOS may ask again for the same permissions after you rebuild.
 
@@ -114,7 +112,7 @@ Click the menu bar icon for:
 
 - **Last Dictation…** to see, and copy, the text of your most recent dictation, with its timings and costs, show its file in Finder, or clear it
 - **Usage…** to see what you have processed and what it cost
-- **Settings…** to set your OpenRouter key and change the hotkey, microphone, launch at login, transcription engine and model, and whether clean-up runs and with which model
+- **Settings…** to set your OpenRouter key and change the hotkey, microphone, transcription engine and model, and whether clean-up runs and with which model
 - **Show Logs in Finder**
 - **Quit**
 
@@ -139,8 +137,6 @@ The development run and the built app share the same data, because they share a 
 
 | Symptom | Fix |
 |---|---|
-| Launch at login says it is only available in the installed app | It works only from the built `.app`, not from `npm run tauri dev`. |
-| Launch at login says it is waiting for approval | Switch Dictation AI on under System Settings > General > Login Items. The **Open Login Items** button there takes you to it. |
 | The app starts but the hotkey does nothing, and the icon flashes red | Another program (often a second copy of this app) holds the hotkey. Quit it, or pick a different hotkey in Settings. |
 | The error icon appears, or the logs say "No OpenRouter API key is set" | Open Settings and add your key, then use **Check key**. |
 | **Check key** says the key was rejected | The key is wrong, revoked, or from a different account. Create a new one on OpenRouter and use **Replace**. |

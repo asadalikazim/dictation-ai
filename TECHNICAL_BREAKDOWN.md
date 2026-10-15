@@ -38,7 +38,6 @@ Each is a Rust module with a narrow interface, wired together in `lib.rs`, which
 | `catalog.rs` | The curated OpenRouter model lists for the drop-downs, and model-id validation |
 | `status.rs` | Menu bar icon states, drawn at runtime |
 | `logger.rs` | Size-bounded rolling log files |
-| `login_item.rs` | Launch at login through `SMAppService` |
 | `usage.rs` | Tally of audio seconds, words and cost |
 | `last_dictation.rs` | The latest dictation's text and timings, in a JSON file |
 
@@ -334,16 +333,7 @@ Not a separate code path: it is what the existing pieces do together when nothin
 - Nothing leaves the machine in the first row. The usage tally still counts the audio seconds and words, at zero cost.
 - The switch is explicit, not automatic: the app does not try to detect that it is offline.
 
-### 3.13 Launch at login
-
-- Implemented with macOS's `SMAppService` (the `objc2-service-management` crate): the login item is the app bundle itself (`mainAppService`), registered and unregistered through the system. It appears under System Settings > General > Login Items, where the user can also revoke it.
-- Chosen over a LaunchAgent plist file (which would hard-code a path that goes stale if the app moves) and over `tauri-plugin-autostart` (which writes such a plist).
-- **The state belongs to macOS, not to `settings.json`**, and is read from the system whenever the Settings window opens or gains focus. Four states: Enabled, Disabled, Needs approval (registered but switched off in System Settings, with an **Open Login Items** button), and Unavailable (not running from a bundle, as under `tauri dev`; the control is disabled with an explanation).
-- Requires a code-signed bundle, which is why the build signs it ad hoc ([section 5](#5-permissions-and-packaging)). It is meaningful only for the built app, from a stable location such as `/Applications`.
-- The state is logged at startup (`launch at login: …`).
-- Tests cover the mapping from every system status to the four states and the serialised form the UI expects. The live registration itself can only be exercised from the built app.
-
-### 3.14 Last dictation
+### 3.13 Last dictation
 
 - **What**: the transcript, the cleaned text, the audio length, and for each step the model used, the time it took and its cost, plus whether transcription ran in the cloud or locally, for the most recent dictation only. It is the one place the app keeps what was said; logs and the usage tally never do.
 - **Storage**: `last-dictation.json` in the app data directory: one flat JSON object with the time recorded, audio seconds, the transcription engine, model, time and cost, the transcript, the clean-up state (`pending`, `done`, `failed` or `off`), model, time and cost, the cleaned text, and the total time from key release to paste. Fields that are not known yet are `null`. Each write goes to a temp file and is renamed, as for the usage tally. The file is read back at startup, so the window survives a restart. A file that does not parse is treated as no dictation yet. An older `last-dictation.txt` from a previous build is deleted on startup.
@@ -394,11 +384,11 @@ Idle -> Recording -> Transcribing -> Cleaning -> Pasting -> Idle
 
 | Setting | Value | Why |
 |---|---|---|
-| `signingIdentity` | `-` (ad hoc) | Without it only the executable carried the linker's automatic signature and the bundle failed `codesign --verify` ("code has no resources but signature indicates they must be present"). Launch at login needs a properly signed bundle. |
+| `signingIdentity` | `-` (ad hoc) | Without it only the executable carried the linker's automatic signature and the bundle failed `codesign --verify` ("code has no resources but signature indicates they must be present"). |
 | `hardenedRuntime` | `false` | Tauri turns it on when signing. Under it macOS blocks the microphone unless the app has the `com.apple.security.device.audio-input` entitlement, and we have none. It only matters for notarisation. Turning it on later means adding an entitlements file with that key. |
 | `minimumSystemVersion` | `15.0` | See [3.11](#311-local-transcription-whispercpp). |
 
-The product name is `Dictation AI` (`productName`), which names the bundle (`Dictation AI.app`), its display name, and the entry in Login Items. The executable inside is still `dictation-ai`, and the bundle identifier is unchanged, so the settings, usage, log and Keychain locations did not move.
+The product name is `Dictation AI` (`productName`), which names the bundle (`Dictation AI.app`), and its display name. The executable inside is still `dictation-ai`, and the bundle identifier is unchanged, so the settings, usage, log and Keychain locations did not move.
 
 - The resulting signature is ad hoc with the bundle identifier as its identifier, sealed resources, and no entitlements; `codesign --verify --deep --strict` passes.
 - An ad-hoc signature's designated requirement is the binary's hash, so it changes with every build. macOS therefore treats each rebuild as a new program and may ask again for the microphone, Accessibility and Keychain access. A stable signing certificate would stop that; none is used.
@@ -446,7 +436,6 @@ dictation-ai/
       catalog.rs              curated cloud model lists, model-id validation
       status.rs               tray icon states
       logger.rs               rolling file logger
-      login_item.rs           launch at login (SMAppService)
       usage.rs                usage tally
       last_dictation.rs       latest dictation text and timings
 ```
@@ -467,14 +456,14 @@ Each step was demoable before moving on.
 10. Test pass: several apps, long and short clips, no network, rapid key presses.
 11. Rolling file logs ([3.8](#38-logging)), replacing console prints.
 12. Usage tally ([3.9](#39-usage-tally)), shown in its own window from the menu bar.
-    Later: the Last Dictation window ([3.14](#314-last-dictation)).
+    Later: the Last Dictation window ([3.13](#313-last-dictation)).
 13. Automatic retries for OpenRouter calls ([3.10](#310-automatic-retries)).
 14. Local transcription with bundled models, engine toggle and model picker in settings ([3.11](#311-local-transcription-whispercpp)).
 15. Drop-downs for the cloud transcription model ([3.3](#33-cloud-transcription-openrouter)) and the clean-up model ([3.4](#34-clean-up-openrouter)), each with an "Other…" free-text entry.
 16. OpenRouter key entered in Settings and stored in the macOS Keychain, with a Check key button; the build-time `.env` reading was removed ([3.6](#36-settings-and-the-api-key)).
 17. A clean-up On/Off switch, which with local transcription gives a fully offline mode ([3.12](#312-offline-mode)).
 18. A formatting-aware clean-up prompt with worked examples: lists, paragraphs, email layout, spoken URLs and numbers ([3.4](#34-clean-up-openrouter)).
-19. Launch at login through `SMAppService` ([3.13](#313-launch-at-login)), a properly signed bundle for the built app ([section 5](#5-permissions-and-packaging)), and the product name `Dictation AI`.
+19. A signed bundle for the built app ([section 5](#5-permissions-and-packaging)), the product name `Dictation AI`, and a startup that survives a taken hotkey ([3.1](#31-hotkey)). Launch at login was added here and later removed.
 
 ## 8. Risks and open items
 
@@ -507,4 +496,3 @@ When memory looks high in Activity Monitor during development, `rust-analyzer` (
 - The clean-up prompt and its worked examples live in plain files, and the prompt formats lists, paragraphs and emails ([3.4](#34-clean-up-openrouter)).
 - Local clean-up models were evaluated and not pursued ([3.4](#34-clean-up-openrouter)).
 - The built app is signed ad hoc with hardened runtime off, minimum macOS 15, and named `Dictation AI` ([section 5](#5-permissions-and-packaging)).
-- Launch at login uses `SMAppService` and its state is owned by macOS ([3.13](#313-launch-at-login)).
