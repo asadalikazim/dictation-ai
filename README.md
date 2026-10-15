@@ -26,7 +26,7 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 - Menu bar app: no Dock icon, no main window, with a status icon for idle, listening, processing and error
 - Configurable hotkey, microphone and transcription engine (cloud or a local model). The cloud transcription model and the clean-up model are picked from short lists, or set to any [OpenRouter](https://openrouter.ai/models) model ID.
 - Your OpenRouter key is entered in Settings and stored in the macOS Keychain, with a **Check key** button
-- A Usage window: audio seconds, words and cost for the last 24 hours and all time, split by transcription and clean-up
+- A Usage window: audio seconds, words and cost for the last 24 hours, the last 30 days and all time (with how many days the tally has been running), split by transcription and clean-up
 - A Last Dictation window: the most recent transcript and cleaned-up text, each with a Copy button, plus the audio length, word counts, and for each step the model, how long it took and what it cost, including whether transcription ran in the cloud or locally. The text is kept in `last-dictation.json`, which the window can show in Finder or clear
 - Clean-up also lays out what you said: numbered lists from "firstly, secondly…", paragraph breaks, and emails with the greeting and sign-off on their own lines
 - Clean-up can be switched off; together with local transcription that gives a fully offline mode

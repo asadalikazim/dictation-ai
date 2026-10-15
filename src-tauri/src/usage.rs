@@ -1,6 +1,6 @@
 //! Usage tally, split by pipeline stage (transcription and clean-up), for the
-//! last 24 hours and for all time. Individual events are kept only for the
-//! 24 hour window; older ones are folded into the all-time totals.
+//! last 24 hours, the last 30 days and all time. Individual events are kept
+//! only for the 30 day window; older ones are folded into the all-time totals.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -8,9 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-const WINDOW_SECS: u64 = 24 * 60 * 60;
+const DAY_SECS: u64 = 24 * 60 * 60;
+const MONTH_SECS: u64 = 30 * DAY_SECS;
 /// Bumped when the on-disk shape changes. A file with any other version
-/// is discarded and the tally starts again from zero.
+/// is discarded and the tally starts again from zero. Fields added since
+/// then are optional (`serde(default)`), so adding one does not reset anyone.
 const FORMAT_VERSION: u32 = 2;
 
 /// Sums for one or more dictations, as stored on disk.
@@ -75,7 +77,10 @@ pub struct CleanupSummary {
 #[derive(Serialize)]
 pub struct UsageSnapshot {
     pub last_24h: Summary,
+    pub last_30d: Summary,
     pub all_time: Summary,
+    /// Whole days since the tally began; `None` before the first dictation.
+    pub tracking_days: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -91,11 +96,20 @@ struct UsageFile {
     version: u32,
     all_time: Totals,
     recent: Vec<Event>,
+    /// Unix seconds of the first recorded dictation. Absent in files written
+    /// before this was tracked; see `record`.
+    #[serde(default)]
+    first_recorded_at: Option<u64>,
 }
 
 impl Default for UsageFile {
     fn default() -> Self {
-        Self { version: FORMAT_VERSION, all_time: Totals::default(), recent: Vec::new() }
+        Self {
+            version: FORMAT_VERSION,
+            all_time: Totals::default(),
+            recent: Vec::new(),
+            first_recorded_at: None,
+        }
     }
 }
 
@@ -134,9 +148,16 @@ impl UsageStore {
     pub fn record(&self, totals: Totals) {
         let mut data = self.data.lock().unwrap();
         let now = now_secs();
+        if data.first_recorded_at.is_none() {
+            // A tally from before the start was tracked: the oldest event
+            // still kept is the best available estimate, and later than
+            // the truth if the tally is older than 30 days.
+            data.first_recorded_at =
+                Some(data.recent.iter().map(|e| e.at).min().unwrap_or(now));
+        }
         data.all_time.add(totals);
         data.recent.push(Event { at: now, totals });
-        data.recent.retain(|e| now.saturating_sub(e.at) < WINDOW_SECS);
+        data.recent.retain(|e| now.saturating_sub(e.at) < MONTH_SECS);
         if let Err(e) = self.save(&data) {
             log::warn!("could not save usage tally: {e}");
         }
@@ -146,12 +167,24 @@ impl UsageStore {
         let data = self.data.lock().unwrap();
         let now = now_secs();
         let mut last_24h = Totals::default();
+        let mut last_30d = Totals::default();
         for event in &data.recent {
-            if now.saturating_sub(event.at) < WINDOW_SECS {
+            let age = now.saturating_sub(event.at);
+            if age < DAY_SECS {
                 last_24h.add(event.totals);
             }
+            if age < MONTH_SECS {
+                last_30d.add(event.totals);
+            }
         }
-        UsageSnapshot { last_24h: last_24h.summary(), all_time: data.all_time.summary() }
+        UsageSnapshot {
+            last_24h: last_24h.summary(),
+            last_30d: last_30d.summary(),
+            all_time: data.all_time.summary(),
+            tracking_days: data
+                .first_recorded_at
+                .map(|first| now.saturating_sub(first) / DAY_SECS),
+        }
     }
 
     /// Write to a temp file then rename, so a crash cannot leave a torn file.
@@ -177,7 +210,7 @@ mod tests {
     fn store_with(name: &str, recent: Vec<Event>, all_time: Totals) -> UsageStore {
         UsageStore {
             path: temp_path(name),
-            data: Mutex::new(UsageFile { version: FORMAT_VERSION, all_time, recent }),
+            data: Mutex::new(UsageFile { version: FORMAT_VERSION, all_time, recent, first_recorded_at: None }),
         }
     }
 
@@ -217,13 +250,14 @@ mod tests {
         let store = store_with(
             "window",
             vec![
-                Event { at: now - 2 * WINDOW_SECS, totals: old },
+                Event { at: now - 2 * DAY_SECS, totals: old },
                 Event { at: now - 60, totals: new },
             ],
             all,
         );
         let snap = store.snapshot();
         assert_eq!(snap.last_24h.transcription.words, 20);
+        assert_eq!(snap.last_30d.transcription.words, 220, "2 days old is inside 30 days");
         assert_eq!(snap.last_24h.cleanup.words, 18);
         assert!(close(snap.last_24h.transcription.audio_seconds, 10.0));
         assert_eq!(snap.all_time.transcription.words, 220);
@@ -236,15 +270,71 @@ mod tests {
         let old = dictation(5.0, 5, 0.005, 5, 0.001);
         let store = store_with(
             "record",
-            vec![Event { at: now - 2 * WINDOW_SECS, totals: old }],
+            vec![Event { at: now - 2 * MONTH_SECS, totals: old }],
             old,
         );
         store.record(dictation(2.0, 3, 0.002, 3, 0.0005));
         let snap = store.snapshot();
         assert_eq!(snap.last_24h.transcription.words, 3);
+        assert_eq!(snap.last_30d.transcription.words, 3);
         assert_eq!(snap.all_time.transcription.words, 8);
         assert_eq!(store.data.lock().unwrap().recent.len(), 1, "old event should be pruned");
         let _ = std::fs::remove_file(&store.path);
+    }
+
+    #[test]
+    fn last_30d_includes_recent_days_and_drops_older_events() {
+        let now = now_secs();
+        let day = |n: u64| dictation(10.0, n, 0.01, n, 0.001);
+        let store = store_with(
+            "month",
+            vec![
+                Event { at: now - 29 * DAY_SECS, totals: day(1) },
+                Event { at: now - 10 * DAY_SECS, totals: day(2) },
+                Event { at: now - 60, totals: day(4) },
+            ],
+            Totals::default(),
+        );
+        store.record(day(8));
+        let snap = store.snapshot();
+        assert_eq!(snap.last_24h.transcription.words, 4 + 8);
+        assert_eq!(snap.last_30d.transcription.words, 1 + 2 + 4 + 8);
+        // Between the two windows only events from 24h to 30d ago count.
+        assert_eq!(snap.last_30d.cleanup.words, 15);
+        let _ = std::fs::remove_file(&store.path);
+    }
+
+    #[test]
+    fn tracking_days_counts_from_the_first_dictation() {
+        let store = store_with("tracking", Vec::new(), Totals::default());
+        assert_eq!(store.snapshot().tracking_days, None);
+        store.record(dictation(1.0, 1, 0.0, 1, 0.0));
+        assert_eq!(store.snapshot().tracking_days, Some(0));
+        store.data.lock().unwrap().first_recorded_at = Some(now_secs() - 47 * DAY_SECS - 100);
+        assert_eq!(store.snapshot().tracking_days, Some(47));
+        let _ = std::fs::remove_file(&store.path);
+    }
+
+    #[test]
+    fn a_file_without_a_start_time_estimates_it_from_the_oldest_event() {
+        let path = temp_path("legacy-start");
+        let now = now_secs();
+        std::fs::write(
+            &path,
+            format!(
+                r#"{{"version":2,
+                    "all_time":{{"audio_seconds":9.0,"transcription_words":9,"transcription_cost_usd":0.0,"cleanup_words":9,"cleanup_cost_usd":0.0}},
+                    "recent":[{{"at":{},"totals":{{"audio_seconds":9.0,"transcription_words":9,"transcription_cost_usd":0.0,"cleanup_words":9,"cleanup_cost_usd":0.0}}}}]}}"#,
+                now - 3 * DAY_SECS
+            ),
+        )
+        .unwrap();
+        let store = UsageStore::load(path.clone());
+        assert_eq!(store.snapshot().all_time.transcription.words, 9, "must not reset");
+        assert_eq!(store.snapshot().tracking_days, None);
+        store.record(dictation(1.0, 1, 0.0, 1, 0.0));
+        assert_eq!(store.snapshot().tracking_days, Some(3));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

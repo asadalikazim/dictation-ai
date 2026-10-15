@@ -315,7 +315,7 @@ fn open_settings(app: &AppHandle) {
 }
 
 fn open_usage(app: &AppHandle) {
-    open_window(app, "usage", "usage.html", "Dictation AI Usage", (440.0, 400.0));
+    open_window(app, "usage", "usage.html", "Dictation AI Usage", (540.0, 400.0));
 }
 
 fn open_last_dictation(app: &AppHandle) {

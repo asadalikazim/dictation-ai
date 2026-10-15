@@ -228,7 +228,7 @@ Consequences:
 
 ### 3.9 Usage tally
 
-Split by pipeline stage, each for the last 24 hours and for all time:
+Split by pipeline stage, each for the last 24 hours, the last 30 days and for all time:
 
 | | Meaning |
 |---|---|
@@ -241,11 +241,12 @@ Split by pipeline stage, each for the last 24 hours and for all time:
 
 Clean-up has no audio figure because it never touches audio.
 
-- **Storage**: `usage.json` in the app data directory: running all-time totals plus a list of per-dictation events for the last 24 hours only. Older events are dropped on each write (their contribution already lives in the all-time totals). Writes go to a temp file and are then renamed, so a crash cannot corrupt the file.
+- **Storage**: `usage.json` in the app data directory: running all-time totals, the time of the first recorded dictation, and a list of per-dictation events for the last 30 days. Older events are dropped on each write (their contribution already lives in the all-time totals). The 24-hour and 30-day figures are both summed from that list. Writes go to a temp file and are then renamed, so a crash cannot corrupt the file.
+- **Elapsed time**: the all-time column is labelled with whole days since the first recorded dictation (`All time (47 days)`, `under a day` on the first day). Files written before this was tracked have no start time; the first dictation after the update sets it to the oldest event still kept, which understates the real age. The same files only held 24 hours of events, so the 30-day column starts short and fills in over the following month. Both fields were added without a format version bump, so no tally was reset.
 - **Format version 2** is the split. The earlier unsplit format cannot be divided between stages, so a file in that format, or one that cannot be read, is discarded and the tally restarts from zero. This happened once, by decision, when the split was introduced.
 - **When it is recorded**: after clean-up and before paste, so cost is counted even if the paste then fails. A clean-up that was rejected (for example too long) is still counted because it was billed; failed requests are not. Discarded clips (too short, silent) cost nothing and are not counted.
 - **Display**: its own Usage window, opened from the menu bar icon, through a `get_usage` command. It refreshes when it gains focus and every 3 seconds while visible, so a dictation made with the window open shows up without reopening it.
-- Tests cover: the stage split and total, the 24-hour window and pruning, zero-cost local runs, reset of an old-format file, persistence across a reload, and an unreadable file.
+- Tests cover: the stage split and total, the 24-hour and 30-day windows and pruning, elapsed days, a file without a start time, zero-cost local runs, reset of an old-format file, persistence across a reload, and an unreadable file.
 
 ### 3.10 Automatic retries
 

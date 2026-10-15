@@ -89,7 +89,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Launch at login, using macOS Login Items
 - Rolling log files, capped at 5 MB in total, for troubleshooting
 - Last Dictation window, opened from the menu bar icon: the transcript and the cleaned-up text of the most recent dictation with a Copy button for each, plus when it was recorded, audio length, word counts, the time from release to paste, and for each step the model used, the time it took and its cost (and whether transcription ran in the cloud or locally). Only that one dictation is kept, in a JSON file that the next dictation overwrites, and it can be cleared from the window
-- Usage tally, in its own Usage window opened from the menu bar icon, for the last 24 hours and for all time, split by stage: transcription (audio seconds, words, cost) and clean-up (words, cost), plus a total cost
+- Usage tally, in its own Usage window opened from the menu bar icon, for the last 24 hours, the last 30 days and for all time (labelled with how many days the tally has been running), split by stage: transcription (audio seconds, words, cost) and clean-up (words, cost), plus a total cost
 
 ### Out of scope (for now)
 

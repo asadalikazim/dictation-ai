@@ -5,7 +5,12 @@ type Summary = {
   cleanup: { words: number; cost_usd: number };
   total_cost_usd: number;
 };
-type Usage = { last_24h: Summary; all_time: Summary };
+type Usage = {
+  last_24h: Summary;
+  last_30d: Summary;
+  all_time: Summary;
+  tracking_days: number | null;
+};
 
 function formatDuration(totalSeconds: number): string {
   const s = Math.round(totalSeconds);
@@ -13,6 +18,12 @@ function formatDuration(totalSeconds: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ${s % 60}s`;
   return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function formatTracked(days: number | null): string {
+  if (days === null) return "All time";
+  if (days === 0) return "All time (under a day)";
+  return `All time (${days} ${days === 1 ? "day" : "days"})`;
 }
 
 function formatCost(usd: number): string {
@@ -36,7 +47,9 @@ async function loadUsage(): Promise<void> {
     setCell(`usage-total-${suffix}`, formatCost(u.total_cost_usd));
   };
   fill("24h", usage.last_24h);
+  fill("30d", usage.last_30d);
   fill("all", usage.all_time);
+  setCell("usage-all-heading", formatTracked(usage.tracking_days));
 }
 
 // Dictations happen while this window may be open behind another app, so
