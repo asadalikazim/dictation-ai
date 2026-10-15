@@ -27,10 +27,11 @@ If clean-up fails, you still get the raw transcript. Temporary OpenRouter failur
 - Configurable hotkey, microphone and transcription engine (cloud or a local model). The cloud transcription model and the clean-up model are picked from short lists, or set to any [OpenRouter](https://openrouter.ai/models) model ID.
 - Your OpenRouter key is entered in Settings and stored in the macOS Keychain, with a **Check key** button
 - A Usage window: audio seconds, words and cost for the last 24 hours and all time, split by transcription and clean-up
+- A Last Dictation window: the most recent transcript and cleaned-up text, each with a Copy button, plus the audio length, word counts, and for each step the model, how long it took and what it cost, including whether transcription ran in the cloud or locally. The text is kept in `last-dictation.json`, which the window can show in Finder or clear
 - Clean-up also lays out what you said: numbered lists from "firstly, secondly…", paragraph breaks, and emails with the greeting and sign-off on their own lines
 - Clean-up can be switched off; together with local transcription that gives a fully offline mode
 - Launch at login, through macOS Login Items
-- Size-capped rolling log files (5 MB total) that never contain what you said
+- Size-capped rolling log files (5 MB total) that never contain what you said. The only place your words are stored is `last-dictation.json`, which holds just the latest dictation and is overwritten by the next one
 
 ## Offline mode
 
@@ -111,6 +112,7 @@ Two more tests are ignored by default: `keychain_round_trip` (uses a throwaway i
 
 Click the menu bar icon for:
 
+- **Last Dictation…** to see, and copy, the text of your most recent dictation, with its timings and costs, show its file in Finder, or clear it
 - **Usage…** to see what you have processed and what it cost
 - **Settings…** to set your OpenRouter key and change the hotkey, microphone, launch at login, transcription engine and model, and whether clean-up runs and with which model
 - **Show Logs in Finder**
@@ -120,7 +122,7 @@ Click the menu bar icon for:
 
 | What | Where |
 |---|---|
-| Settings and usage tally | `~/Library/Application Support/com.asadkazim.dictationai/` (`settings.json`, `usage.json`) |
+| Settings, usage tally and last dictation | `~/Library/Application Support/com.asadkazim.dictationai/` (`settings.json`, `usage.json`, `last-dictation.json`) |
 | Your OpenRouter key | The macOS login Keychain: service `com.asadkazim.dictationai`, account `openrouter-api-key` (visible in Keychain Access). Never in a file. |
 | Logs | `~/Library/Logs/com.asadkazim.dictationai/` |
 | Whisper models in a built app | inside the app bundle, under `Contents/Resources/resources/models` |

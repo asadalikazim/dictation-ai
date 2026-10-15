@@ -6,12 +6,13 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
 
-  // Two pages: the settings window (index.html) and the usage window.
+  // Three pages: the settings, usage and last dictation windows.
   build: {
     rollupOptions: {
       input: {
         main: new URL("./index.html", import.meta.url).pathname,
         usage: new URL("./usage.html", import.meta.url).pathname,
+        lastDictation: new URL("./last-dictation.html", import.meta.url).pathname,
       },
     },
   },

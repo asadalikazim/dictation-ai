@@ -2,6 +2,7 @@ mod apikey;
 mod audio;
 mod catalog;
 mod cleanup;
+mod last_dictation;
 mod local;
 mod logger;
 mod login_item;
@@ -22,6 +23,7 @@ use tauri::{
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use settings::{AppState, Engine, Settings};
+use last_dictation::{LastDictationStore, Transcribed};
 use status::Status;
 use usage::{Totals, UsageStore};
 
@@ -145,6 +147,10 @@ async fn process(
     }
 
     let started = Instant::now();
+    let transcription_model = match engine {
+        Engine::Cloud => cloud_model.clone(),
+        Engine::Local => local_model.clone(),
+    };
     let (result, engine_label) = match engine {
         Engine::Cloud => {
             let result = match recording.to_wav() {
@@ -182,17 +188,32 @@ async fn process(
             return Outcome::Failed;
         }
     };
+    let transcription_ms = started.elapsed().as_millis() as u64;
     log::info!(
-        "transcribed {} words ({engine_label}) in {} ms, {} ms after release (cost ${:.5})",
+        "transcribed {} words ({engine_label}) in {transcription_ms} ms, {} ms after release (cost ${:.5})",
         word_count(&transcription.text),
-        started.elapsed().as_millis(),
         released_at.elapsed().as_millis(),
         transcription.cost_usd
     );
     log::debug!("transcript: {:?}", transcription.text);
 
+    // Written before clean-up starts, so the transcript is on disk even if
+    // clean-up is slow or the app is quit while it runs.
+    let state = app.state::<AppState>();
+    state.last_dictation.begin(Transcribed {
+        audio_seconds: f64::from(secs),
+        ms: transcription_ms,
+        engine,
+        model: &transcription_model,
+        cost_usd: transcription.cost_usd,
+        text: &transcription.text,
+        cleanup_model: cleanup_enabled.then_some(model.as_str()),
+    });
+
     let (final_text, cleanup_words, cleanup_cost) = if cleanup_enabled {
+        let cleanup_started = Instant::now();
         let (cleaned, cleanup_cost) = cleanup::clean(&transcription.text, &model).await;
+        let cleanup_ms = cleanup_started.elapsed().as_millis() as u64;
         match cleaned {
             Ok(text) => {
                 log::info!(
@@ -200,11 +221,13 @@ async fn process(
                     released_at.elapsed().as_millis()
                 );
                 log::debug!("cleaned: {text:?}");
+                state.last_dictation.finish_cleanup(Some(&text), cleanup_ms, cleanup_cost);
                 let words = word_count(&text);
                 (text, words, cleanup_cost)
             }
             Err(e) => {
                 log::warn!("clean-up failed with {model}, using raw transcript: {e}");
+                state.last_dictation.finish_cleanup(None, cleanup_ms, cleanup_cost);
                 (transcription.text.clone(), 0, cleanup_cost)
             }
         }
@@ -214,7 +237,7 @@ async fn process(
     };
 
     // Cost has been incurred by now, so tally it even if the paste fails.
-    app.state::<AppState>().usage.record(Totals {
+    state.usage.record(Totals {
         audio_seconds: f64::from(secs),
         transcription_words: word_count(&transcription.text),
         transcription_cost_usd: transcription.cost_usd,
@@ -224,7 +247,9 @@ async fn process(
 
     match tauri::async_runtime::spawn_blocking(move || paste::paste_text(&final_text)).await {
         Ok(Ok(())) => {
-            log::info!("pasted, {} ms after release", released_at.elapsed().as_millis());
+            let total_ms = released_at.elapsed().as_millis() as u64;
+            log::info!("pasted, {total_ms} ms after release");
+            state.last_dictation.finish_paste(total_ms);
             Outcome::Pasted
         }
         Ok(Err(e)) => {
@@ -293,6 +318,16 @@ fn open_usage(app: &AppHandle) {
     open_window(app, "usage", "usage.html", "Dictation AI Usage", (440.0, 400.0));
 }
 
+fn open_last_dictation(app: &AppHandle) {
+    open_window(
+        app,
+        "last-dictation",
+        "last-dictation.html",
+        "Dictation AI Last Dictation",
+        (480.0, 840.0),
+    );
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -323,6 +358,10 @@ pub fn run() {
             settings::get_settings,
             settings::get_defaults,
             settings::get_usage,
+            settings::get_last_dictation,
+            settings::copy_last_dictation,
+            settings::reveal_last_dictation,
+            settings::clear_last_dictation,
             settings::list_input_devices,
             settings::list_local_models,
             settings::list_cloud_models,
@@ -362,16 +401,32 @@ pub fn run() {
             });
             let hotkey_label = loaded.hotkey.clone();
             let preload_model = (loaded.engine == Engine::Local).then(|| loaded.local_model.clone());
-            let usage = UsageStore::load(app.path().app_data_dir()?.join("usage.json"));
-            app.manage(AppState::new(loaded, shortcut.clone(), settings_path, usage));
+            let data_dir = app.path().app_data_dir()?;
+            let usage = UsageStore::load(data_dir.join("usage.json"));
+            let last_dictation =
+                LastDictationStore::load(data_dir.join("last-dictation.json"));
+            app.manage(AppState::new(
+                loaded,
+                shortcut.clone(),
+                settings_path,
+                usage,
+                last_dictation,
+            ));
 
             let usage_item = MenuItem::with_id(app, "usage", "Usage…", true, None::<&str>)?;
+            let last_item = MenuItem::with_id(
+                app,
+                "last_dictation",
+                "Last Dictation…",
+                true,
+                None::<&str>,
+            )?;
             let settings_item =
                 MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let logs_item =
                 MenuItem::with_id(app, "logs", "Show Logs in Finder", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Dictation AI", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&usage_item, &settings_item, &logs_item, &quit])?;
+            let menu = Menu::with_items(app, &[&last_item, &usage_item, &settings_item, &logs_item, &quit])?;
 
             TrayIconBuilder::with_id(status::TRAY_ID)
                 .icon(status::initial_icon())
@@ -379,6 +434,7 @@ pub fn run() {
                 .menu(&menu)
                 .tooltip("Dictation AI")
                 .on_menu_event(move |app, event| match event.id().as_ref() {
+                    "last_dictation" => open_last_dictation(app),
                     "usage" => open_usage(app),
                     "settings" => open_settings(app),
                     "logs" => {

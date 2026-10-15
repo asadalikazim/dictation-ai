@@ -72,7 +72,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - **Never lose what you said.** Temporary failures talking to OpenRouter are retried automatically and silently (up to five times). If clean-up still fails, you get the raw transcript pasted.
 - **One service, one key.** Pay-as-you-go, costing pennies at personal volumes.
 - **Honest about privacy.** Both your recorded audio and the resulting text are sent to OpenRouter and its model providers (audio only in cloud mode). Privacy settings on the OpenRouter account should be configured accordingly.
-- **Diagnosable without being invasive.** Logs and the usage tally record what happened (timings, sizes, word counts, costs, errors), never what was said, and they stay on your machine.
+- **Diagnosable without being invasive.** Logs and the usage tally record what happened (timings, sizes, word counts, costs, errors), never what was said, and they stay on your machine. The one exception is the Last Dictation file, which holds the latest dictation's text and nothing older.
 
 ## Scope
 
@@ -88,6 +88,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Automatic retries of transient OpenRouter failures
 - Launch at login, using macOS Login Items
 - Rolling log files, capped at 5 MB in total, for troubleshooting
+- Last Dictation window, opened from the menu bar icon: the transcript and the cleaned-up text of the most recent dictation with a Copy button for each, plus when it was recorded, audio length, word counts, the time from release to paste, and for each step the model used, the time it took and its cost (and whether transcription ran in the cloud or locally). Only that one dictation is kept, in a JSON file that the next dictation overwrites, and it can be cleared from the window
 - Usage tally, in its own Usage window opened from the menu bar icon, for the last 24 hours and for all time, split by stage: transcription (audio seconds, words, cost) and clean-up (words, cost), plus a total cost
 
 ### Out of scope (for now)
@@ -99,7 +100,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Per-app tone or formatting adaptation
 - Custom dictionary or snippets
 - Editing selected text by voice
-- History, search, or transcript storage (logs and the usage tally deliberately hold no dictated text)
+- History or search: only the single most recent dictation is kept (logs and the usage tally deliberately hold no dictated text)
 - Multiple languages and auto-detection
 - Windows, Linux, iOS, or Android
 - Accounts, sync, or any backend of our own

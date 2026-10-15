@@ -11,6 +11,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use crate::audio;
 use crate::catalog;
 use crate::local;
+use crate::last_dictation::{LastDictation, LastDictationStore};
 use crate::usage::{UsageSnapshot, UsageStore};
 
 pub const DEFAULT_HOTKEY: &str = "Alt+Space";
@@ -86,6 +87,7 @@ pub struct AppState {
     pub shortcut: Mutex<Shortcut>,
     pub settings_path: PathBuf,
     pub usage: UsageStore,
+    pub last_dictation: LastDictationStore,
 }
 
 impl AppState {
@@ -94,6 +96,7 @@ impl AppState {
         shortcut: Shortcut,
         settings_path: PathBuf,
         usage: UsageStore,
+        last_dictation: LastDictationStore,
     ) -> Self {
         Self {
             recording: Mutex::new(None),
@@ -101,6 +104,7 @@ impl AppState {
             shortcut: Mutex::new(shortcut),
             settings_path,
             usage,
+            last_dictation,
         }
     }
 
@@ -120,6 +124,47 @@ pub fn get_settings(state: State<AppState>) -> Settings {
 #[tauri::command]
 pub fn get_usage(state: State<AppState>) -> UsageSnapshot {
     state.usage.snapshot()
+}
+
+#[tauri::command]
+pub fn get_last_dictation(state: State<AppState>) -> Option<LastDictation> {
+    state.last_dictation.snapshot()
+}
+
+/// Copy the transcript (`"transcript"`) or the cleaned text (`"cleaned"`) of
+/// the last dictation to the clipboard.
+#[tauri::command]
+pub fn copy_last_dictation(which: String, state: State<AppState>) -> Result<(), String> {
+    let last = state.last_dictation.snapshot().ok_or("there is no dictation yet")?;
+    let text = match which.as_str() {
+        "transcript" => last.transcript,
+        "cleaned" => last.cleaned.ok_or("there is no cleaned text")?,
+        other => return Err(format!("unknown text: {other}")),
+    };
+    arboard::Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(text))
+        .map_err(|e| e.to_string())
+}
+
+/// Show `last-dictation.json` in Finder.
+#[tauri::command]
+pub fn reveal_last_dictation(state: State<AppState>) -> Result<(), String> {
+    let path = state.last_dictation.path();
+    if !path.exists() {
+        return Err("there is no dictation yet".to_string());
+    }
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Forget the last dictation and delete its file.
+#[tauri::command]
+pub fn clear_last_dictation(state: State<AppState>) -> Result<(), String> {
+    state.last_dictation.clear()
 }
 
 #[tauri::command]

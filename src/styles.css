@@ -325,3 +325,44 @@ tr.total td {
 tr.total th {
   color: var(--fg);
 }
+
+.last-text {
+  margin-top: 20px;
+}
+
+.last-text-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.last-text h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.text-box {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  cursor: text;
+}
+
+.text-box.empty {
+  color: var(--muted);
+  user-select: none;
+  cursor: default;
+}
+
+.last-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 16px;
+}

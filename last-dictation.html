@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dictation AI Last Dictation</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/last-dictation.ts" defer></script>
+  </head>
+  <body>
+    <main>
+      <p id="last-empty" class="hint" hidden>No dictation yet. Hold the hotkey and speak.</p>
+      <div id="last-content" hidden>
+        <section class="usage" aria-label="Details">
+          <table>
+            <tbody>
+              <tr>
+                <th scope="row">Recorded</th>
+                <td id="last-when">–</td>
+              </tr>
+              <tr>
+                <th scope="row">Audio length</th>
+                <td id="last-audio">–</td>
+              </tr>
+              <tr>
+                <th scope="row">Release to pasted</th>
+                <td id="last-total-time">–</td>
+              </tr>
+              <tr class="group"><th scope="rowgroup" colspan="2">Transcription</th></tr>
+              <tr>
+                <th scope="row" class="sub">Engine</th>
+                <td id="last-t-engine">–</td>
+              </tr>
+              <tr>
+                <th scope="row" class="sub">Model</th>
+                <td id="last-t-model">–</td>
+              </tr>
+              <tr>
+                <th scope="row" class="sub">Words</th>
+                <td id="last-t-words">–</td>
+              </tr>
+              <tr>
+                <th scope="row" class="sub">Time</th>
+                <td id="last-t-time">–</td>
+              </tr>
+              <tr>
+                <th scope="row" class="sub">Cost</th>
+                <td id="last-t-cost">–</td>
+              </tr>
+              <tr class="group"><th scope="rowgroup" colspan="2">Clean-up</th></tr>
+              <tr>
+                <th scope="row" class="sub">Model</th>
+                <td id="last-c-model">–</td>
+              </tr>
+              <tr>
+                <th scope="row" class="sub">Words</th>
+                <td id="last-c-words">–</td>
+              </tr>
+              <tr>
+                <th scope="row" class="sub">Time</th>
+                <td id="last-c-time">–</td>
+              </tr>
+              <tr>
+                <th scope="row" class="sub">Cost</th>
+                <td id="last-c-cost">–</td>
+              </tr>
+              <tr class="total">
+                <th scope="row">Total cost</th>
+                <td id="last-total-cost">–</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="last-text" aria-labelledby="last-t-heading">
+          <div class="last-text-head">
+            <h2 id="last-t-heading">Transcribed text</h2>
+            <button type="button" class="link" id="last-t-copy">Copy</button>
+          </div>
+          <div class="text-box" id="last-t-text"></div>
+        </section>
+
+        <section class="last-text" aria-labelledby="last-c-heading">
+          <div class="last-text-head">
+            <h2 id="last-c-heading">Cleaned-up text</h2>
+            <button type="button" class="link" id="last-c-copy">Copy</button>
+          </div>
+          <div class="text-box" id="last-c-text"></div>
+        </section>
+
+        <div class="last-actions">
+          <button type="button" class="link" id="last-reveal">Show file in Finder</button>
+          <button type="button" class="link" id="last-clear">Clear</button>
+        </div>
+        <p id="last-message" class="saved" role="status"></p>
+      </div>
+    </main>
+  </body>
+</html>

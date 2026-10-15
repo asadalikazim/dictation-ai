@@ -8,7 +8,7 @@ This document describes the app as built. Measurements in [3.11](#311-local-tran
 
 - **Tauri v2**, macOS only, Apple Silicon (developed on an M1 Pro).
 - **A Rust backend holds all the real logic**: hotkey, audio, API calls, paste. The hard parts of this app are OS integration, which is simplest to do in Rust directly rather than through JS plugins or sidecar processes.
-- **The frontend is TypeScript and plain HTML/CSS** (a two-page Vite build): the settings window and the usage window. Each reads and writes state through Tauri commands.
+- **The frontend is TypeScript and plain HTML/CSS** (a three-page Vite build): the settings, usage and last dictation windows. Each reads and writes state through Tauri commands.
 - **No hidden-webview logic**, so macOS throttling of hidden web content cannot affect recording or the hotkey.
 - **Clean-up always goes through OpenRouter.** Transcription is a user choice between OpenRouter's hosted Whisper (default) and local whisper.cpp with three models bundled into the app ([3.11](#311-local-transcription-whispercpp)). There is deliberately no automatic fallback between the two engines.
 
@@ -40,6 +40,7 @@ Each is a Rust module with a narrow interface, wired together in `lib.rs`, which
 | `logger.rs` | Size-bounded rolling log files |
 | `login_item.rs` | Launch at login through `SMAppService` |
 | `usage.rs` | Tally of audio seconds, words and cost |
+| `last_dictation.rs` | The latest dictation's text and timings, in a JSON file |
 
 ### 3.1 Hotkey
 
@@ -207,8 +208,8 @@ Consequences:
 
 ### 3.7 Tray and app shell
 
-- The menu bar item is built with Tauri's tray API. Menu: **Usage…**, **Settings…**, **Show Logs in Finder**, **Quit**.
-- Usage and Settings are separate windows (`usage.html` and `index.html`). Each is created on first use and destroyed when closed, so it is rebuilt the next time it is opened.
+- The menu bar item is built with Tauri's tray API. Menu: **Last Dictation…**, **Usage…**, **Settings…**, **Show Logs in Finder**, **Quit**.
+- Last Dictation, Usage and Settings are separate windows (`last-dictation.html`, `usage.html` and `index.html`). Each is created on first use and destroyed when closed, so it is rebuilt the next time it is opened.
 - Icon states are drawn at runtime: idle (a template ring that follows the menu bar appearance), listening (red dot), processing (amber dot), error (red ring for 3 seconds, then idle).
 - The Dock icon is hidden by setting the Accessory activation policy at startup.
 - The app keeps running with no windows open: exit requests that are not explicit quits are prevented.
@@ -341,6 +342,17 @@ Not a separate code path: it is what the existing pieces do together when nothin
 - The state is logged at startup (`launch at login: …`).
 - Tests cover the mapping from every system status to the four states and the serialised form the UI expects. The live registration itself can only be exercised from the built app.
 
+### 3.14 Last dictation
+
+- **What**: the transcript, the cleaned text, the audio length, and for each step the model used, the time it took and its cost, plus whether transcription ran in the cloud or locally, for the most recent dictation only. It is the one place the app keeps what was said; logs and the usage tally never do.
+- **Storage**: `last-dictation.json` in the app data directory: one flat JSON object with the time recorded, audio seconds, the transcription engine, model, time and cost, the transcript, the clean-up state (`pending`, `done`, `failed` or `off`), model, time and cost, the cleaned text, and the total time from key release to paste. Fields that are not known yet are `null`. Each write goes to a temp file and is renamed, as for the usage tally. The file is read back at startup, so the window survives a restart. A file that does not parse is treated as no dictation yet. An older `last-dictation.txt` from a previous build is deleted on startup.
+- **When it is written**: in three steps. As soon as transcription finishes, before clean-up starts, the file is replaced with the transcript and clean-up marked `pending` (or `off`). When clean-up ends it is rewritten with the cleaned text (`done`) or marked `failed`, with its time and cost. When the paste succeeds, `total_ms` is filled in. Clips discarded as too short, silent or empty, and transcription failures, leave the previous dictation untouched. If it is cleared while clean-up is running, the later steps do nothing.
+- **Display**: its own Last Dictation window, through `get_last_dictation`, refreshing on focus and every 3 seconds like the Usage window. Word counts are computed from the text in the window; clean-up states other than `done` show a short note in place of the cleaned text.
+- **Copy**: `copy_last_dictation` (`"transcript"` or `"cleaned"`) puts the text on the clipboard from the backend with `arboard`, as the paste step does.
+- **Show file in Finder**: `reveal_last_dictation` runs `open -R` on the file.
+- **Clear**: `clear_last_dictation` forgets the dictation and deletes the file, so the stored text can be removed without leaving the app.
+- Tests cover each write step surviving a reload, a failed clean-up keeping its cost, replacement by a newer dictation, clearing (including late steps not bringing it back), and removal of the old text file.
+
 ## 4. Core flow
 
 ```text
@@ -401,12 +413,14 @@ dictation-ai/
   package.json                frontend dependencies and scripts
   index.html                  settings window page
   usage.html                  usage window page
-  vite.config.ts              two-page build
+  last-dictation.html         last dictation window page
+  vite.config.ts              three-page build
   scripts/
     fetch-models.sh           downloads and verifies the bundled models
   src/
     main.ts                   settings window logic
     usage.ts                  usage window logic
+    last-dictation.ts         last dictation window logic
     styles.css                shared styles
   src-tauri/
     Cargo.toml
@@ -433,6 +447,7 @@ dictation-ai/
       logger.rs               rolling file logger
       login_item.rs           launch at login (SMAppService)
       usage.rs                usage tally
+      last_dictation.rs       latest dictation text and timings
 ```
 
 ## 7. Build order (as it happened)
@@ -451,6 +466,7 @@ Each step was demoable before moving on.
 10. Test pass: several apps, long and short clips, no network, rapid key presses.
 11. Rolling file logs ([3.8](#38-logging)), replacing console prints.
 12. Usage tally ([3.9](#39-usage-tally)), shown in its own window from the menu bar.
+    Later: the Last Dictation window ([3.14](#314-last-dictation)).
 13. Automatic retries for OpenRouter calls ([3.10](#310-automatic-retries)).
 14. Local transcription with bundled models, engine toggle and model picker in settings ([3.11](#311-local-transcription-whispercpp)).
 15. Drop-downs for the cloud transcription model ([3.3](#33-cloud-transcription-openrouter)) and the clean-up model ([3.4](#34-clean-up-openrouter)), each with an "Other…" free-text entry.
