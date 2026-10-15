@@ -16,7 +16,7 @@ Hold a hotkey, speak, let go, and clean, ready-to-use text appears wherever your
 ```
 
 - **Transcription** runs either in the cloud (OpenAI Whisper through [OpenRouter](https://openrouter.ai), the default) or locally on your Mac with [whisper.cpp](https://github.com/ggml-org/whisper.cpp) using one of three bundled models. You pick in Settings; there is no automatic fallback between them.
-- **Clean-up** sends the transcript to a language model that removes filler words, applies self-corrections ("Tuesday, no, Wednesday"), adds punctuation, and lays out lists and paragraphs, without changing what you mean. Two strengths: **Tidy** keeps your own words, **Polish** rewrites the text to be clear and concise while keeping your meaningt. It tidies dictated instructions; it never obeys them.
+- **Clean-up** sends the transcript to a language model that removes filler words, applies self-corrections ("Tuesday, no, Wednesday"), adds punctuation, and lays out lists and paragraphs, without changing what you mean. Two strengths: **Tidy** keeps your own words, **Polish** rewrites the text to be clear and concise while keeping your meaning. It tidies dictated instructions; it never obeys them.
 - **Paste** puts the result on the clipboard, sends Cmd+V, and restores whatever was on your clipboard before.
 
 If clean-up fails, you still get the raw transcript. Temporary OpenRouter failures are retried automatically.
@@ -160,3 +160,7 @@ The development run and the built app share the same data, because they share a 
 
 - [PRODUCT_OVERVIEW.md](PRODUCT_OVERVIEW.md): what the app is, the experience, principles, scope and trade-offs
 - [TECHNICAL_BREAKDOWN.md](TECHNICAL_BREAKDOWN.md): architecture, per-component decisions, permissions, packaging and measurements
+
+## License
+
+MIT. See [LICENSE](LICENSE).

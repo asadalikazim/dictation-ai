@@ -56,7 +56,7 @@ The three local models ship inside the app, so switching to local mode needs no 
 
 With transcription set to **On this Mac** and clean-up set to **Off**, the app needs no internet connection and no OpenRouter key. Your speech is transcribed locally and the raw transcript is pasted immediately; nothing leaves the machine. The raw transcript keeps its filler words and has Whisper's own punctuation, which is the trade for working fully offline.
 
-Leaving clean-up on with no key saved behaves the same way, because clean-up fails immediately and the raw transcript is pasted. With a key saved and no network, clean-up retries for about 15 seconds first, which is why the explicit switch exists.
+Leaving clean-up on with no key saved behaves the same way, because clean-up fails immediately and the raw transcript is pasted. With a key saved and no network, clean-up retries for about 15 seconds first, which is why the explicit Off setting exists.
 
 ## What you can configure (in the app)
 
@@ -64,8 +64,7 @@ Leaving clean-up on with no key saved behaves the same way, because clean-up fai
 - The hotkey that triggers dictation
 - Which microphone is used
 - Whether transcription runs in the cloud or on this Mac, which cloud model does it, and which of the three bundled models to use when it runs locally
-- Whether the clean-up step runs at all, and which language model does it
-- Whether the app starts automatically when you log in
+- Whether clean-up runs at all, how strongly it edits (Off, Tidy or Polish), and which language model does it
 
 The cloud transcription model and the clean-up model are each chosen from a short list, or entered as any OpenRouter model id.
 
@@ -91,7 +90,7 @@ The cloud transcription model and the clean-up model are each chosen from a shor
 - Settings: OpenRouter key (stored in the Keychain, with a key check), hotkey, microphone, transcription engine, cloud and local transcription models, clean-up mode (Off, Tidy or Polish) and model
 - Automatic retries of transient OpenRouter failures
 - Rolling log files, capped at 5 MB in total, for troubleshooting
-- Last Dictation window, opened from the menu bar icon: the transcript and the cleaned-up text of the most recent dictation with a Copy button for each, plus when it was recorded, audio length, word counts, the time from release to paste, and for each step the model used, the time it took and its cost (and whether transcription ran in the cloud or locally). Only that one dictation is kept, in a JSON file that the next dictation overwrites, and it can be cleared from the window
+- Last Dictation window, opened from the menu bar icon: the transcript and the cleaned-up text of the most recent dictation with a Copy button for each, plus when it was recorded, audio length, word counts, the clean-up mode used, the time from release to paste, and for each step the model used, the time it took and its cost (and whether transcription ran in the cloud or locally). Only that one dictation is kept, in a JSON file that the next dictation overwrites, and it can be cleared from the window
 - Usage tally, in its own Usage window opened from the menu bar icon, for the last 24 hours, the last 30 days and for all time (labelled with how many days the tally has been running), split by stage: transcription (audio seconds, words, cost) and clean-up (words, cost), plus a total cost
 
 ### Out of scope (for now)
@@ -129,3 +128,4 @@ You can use it all day as your default way to enter text in any app, and it rare
 - The OpenRouter key sits in your login Keychain, so macOS may ask for permission to use it, especially after rebuilding a development build.
 - The app needs two system permissions (microphone and accessibility) that the user must grant manually, and the built app is signed ad hoc and not notarised, so macOS may ask again after a rebuild.
 - The built app requires macOS 15 or later.
+- Polish rewrites freely, so there is a small risk that a rewrite loses a nuance. Tidy is the default for that reason, and the clean-up prompts are checked against a test suite for lost facts, invented content and obeyed instructions (see the technical breakdown). Switch to Tidy or Off when the exact wording matters.
